@@ -182,23 +182,6 @@ c      call prinf('ixys=*',ixys,nch+1)
       call get_iquad_rsc2d(nch,ixys,npts,nnz,row_ptr,col_ind,iquad)
       iquadtype = 1
       eps = 0.51d-11
-c      call prinf('iptype=*',iptype,nch)
-c      call prin2('srcvals=*',srcinfo,8*npts)
-c      call prin2('srccoefs=*',srccoefs,6*npts)
-c      call prinf('ich_id=*',ich_id,npts)
-c      call prin2('ts_pts=*',ts_pts,npts)
-c      call prin2('eps=*',eps,1)
-c      call prin2('zpars=*',zpars,6)
-c      call prinf('iquadtype=*',iquadtype,1)
-c      call prinf('nnz=*',nnz,1)
-c      call prinf('row_ptr=*',row_ptr,npts+1)
-c      call prinf('col_ind=*',col_ind,nnz)
-c      call prinf('iquad=*',iquad,nnz+1)
-c      call prinf('nquad=*',nquad,1)
-c      call getnearquad_helm_comb_dir_2d(nch,norders,ixys,iptype,
-c     1  npts,srccoefs,srcinfo,8,npts,srcinfo,ich_id,ts_pts,
-c     2  eps,zpars,iquadtype,nnz,row_ptr,col_ind,iquad,nquad,
-c     3  wnear)
 
       call prin2('zpars=*',zpars,6)
       call lpcomp_helm_comb_dir_addsub_2d(nch,norders,ixys,
@@ -223,6 +206,16 @@ c     3  wnear)
      1  srcinfo,eps,ndz,zpars,nnz,row_ptr,col_ind,iquad,
      2  nquad,wnearcoefs,sigmacoefs,novers(1),npts_over,ixyso,
      3  srcover,wover,potcoefs)
+      erra = 0
+      ra = 0
+      do i=1,npts
+        potcoefs(i) = potcoefs(i) + sigmacoefs(i)/2*zpars(3)
+        erra = erra + abs(potcoefs(i)-potexcoefs(i))**2
+        ra = ra + abs(potexcoefs(i))**2
+      enddo
+
+      erra = sqrt(erra/ra)
+      call prin2('error in pot galerkin=*',erra,1)
 
        
 
@@ -584,10 +577,13 @@ c
       pi = atan(done)*4
 
       itype = 2
+      call prinf('k=*',k,1)
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
       call legeexps(itype,k,ts,umat,vmat,wts)
 
       itype = 1
+      print *, "nover=",nover
+      
       allocate(tso(nover),wso(nover),pot(npts))
       call legeexps(itype,nover,tso,umato,vmato,wso)
 
@@ -607,6 +603,8 @@ c
       allocate(sources(2,ns),targvals(2,ntarg))
       allocate(charges(ns),dipstr(ns),dipvec(2,ns))
       allocate(sigmaover(ns))
+      print *, "ns=",ns
+      print *, "ntarg=",ntarg
 
 c 
 c   evaluate density at oversampled nodes: assumes all
@@ -614,7 +612,7 @@ c   oversampled orders are identical
 c
       allocate(pmat(k,nover))
       do i=1,nover
-        call legeexps(tso(i),k-1,pmat(1,i))
+        call legepols(tso(i),k-1,pmat(1,i))
       enddo
       
       dalpha = 1.0d0
