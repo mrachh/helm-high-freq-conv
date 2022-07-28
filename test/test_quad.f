@@ -25,12 +25,12 @@
       done = 1.0d0
       pi = atan(done)*4
 
-      zk = 1.1d0 + 0.1d0*ima
+      zk = 1.1d0 + 0.0d0*ima
       zpars(1) = zk
       zpars(2) = -ima*zk
       zpars(3) = 1.0d0
 
-      imode = 5
+      imode = 7
 
       nterms = imode + 5
       rscale = 1.0d0
@@ -43,7 +43,8 @@
       call prin2('fhvals=*',fhvals,2*(imode+1))
       call prin2('fhders=*',fhders,2*(imode+1))
 
-      zfac = pi/2*ima*zk*(fjders(imode)-fjvals(imode))*fhvals(imode)
+      zfac = pi/2*ima*zk*fjders(imode)*fhvals(imode)*zpars(3)
+      zfac = zfac + pi/2*ima*fjvals(imode)*fhvals(imode)*zpars(2)
 
       alpha = 1.0d0
       beta = 0.0d0
@@ -59,7 +60,7 @@
       call legeexps(itype,nover,tover,umo,vmo,wtsover)
 
 
-      nch = 10
+      nch = 14
       allocate(srcinfo(8,k*nch),qwts(k*nch))
       allocate(srccoefs(6,k*nch))
       allocate(srcover(8,nover*nch),wover(nover*nch))
@@ -71,8 +72,8 @@
       allocate(sigma(npts),sigmacoefs(npts),pot(npts),potcoefs(npts))
       allocate(potex(npts))
       do ich=1,nch
-        tstart = (i-1)*h
-        tend = i*h
+        tstart = (ich-1.0d0)*h
+        tend = (ich+0.0d0)*h
         do j=1,k
           ipt = (ich-1)*k + j
           tuse = tstart + (tend-tstart)*(ts(j)+1)/2
@@ -92,6 +93,8 @@
 
         call dgemm('n','t',6,k,k,alpha,srcinfo(1,istart),
      1    8,umat,k,beta,srccoefs(1,istart),6)
+        call prin2('tover*',tover,nover)
+        call prin2('wts=*',wtsover,nover)
         do j=1,nover
           ipt = (ich-1)*nover + j
           tuse = tstart + (tend-tstart)*(tover(j)+1)/2
@@ -113,6 +116,11 @@
       enddo
       ixys(nch+1) = npts+1
       ixyso(nch+1) = npts_over+1
+      ra = sum(wover)
+      ra2 = sum(qwts)
+      call prin2('Error in perimeter of circle=*',abs(ra-2*pi),1)
+      call prin2('Error in perimeter of circle=*',abs(ra2-2*pi),1)
+
 
       call prin2('srccoefs=*',srccoefs,96)
 
@@ -158,6 +166,8 @@ c
       allocate(ich_id(npts),ts_pts(npts))
       call get_chunk_id_ts(nch,norders,ixys,iptype,npts,ich_id,ts_pts)
 
+      print *, "starting trid quad"
+
       call get_helm_dir_trid_quad_corr(zk,nch,k,npts,srcinfo,
      1   ixys,ich_id,ts_pts,ndz,zpars,nnz,row_ptr,col_ind,nquad,
      2   wnear,wnearcoefs)
@@ -165,29 +175,29 @@ c
       call prinf('nch=*',nch,1)
       call prinf('npts=*',npts,1)
       call prinf('nnz=*',nnz,1)
-      call prinf('ixys=*',ixys,nch+1)
+c      call prinf('ixys=*',ixys,nch+1)
       call get_iquad_rsc2d(nch,ixys,npts,nnz,row_ptr,col_ind,iquad)
       iquadtype = 1
-      call prinf('iptype=*',iptype,nch)
-      call prin2('srcvals=*',srcinfo,8*npts)
-      call prin2('srccoefs=*',srccoefs,6*npts)
-      call prinf('ich_id=*',ich_id,npts)
-      call prin2('ts_pts=*',ts_pts,npts)
-      call prin2('eps=*',eps,1)
-      call prin2('zpars=*',zpars,6)
-      call prinf('iquadtype=*',iquadtype,1)
-      call prinf('nnz=*',nnz,1)
-      call prinf('row_ptr=*',row_ptr,npts+1)
-      call prinf('col_ind=*',col_ind,nnz)
-      call prinf('iquad=*',iquad,nnz+1)
-      call prinf('nquad=*',nquad,1)
+      eps = 0.51d-11
+c      call prinf('iptype=*',iptype,nch)
+c      call prin2('srcvals=*',srcinfo,8*npts)
+c      call prin2('srccoefs=*',srccoefs,6*npts)
+c      call prinf('ich_id=*',ich_id,npts)
+c      call prin2('ts_pts=*',ts_pts,npts)
+c      call prin2('eps=*',eps,1)
+c      call prin2('zpars=*',zpars,6)
+c      call prinf('iquadtype=*',iquadtype,1)
+c      call prinf('nnz=*',nnz,1)
+c      call prinf('row_ptr=*',row_ptr,npts+1)
+c      call prinf('col_ind=*',col_ind,nnz)
+c      call prinf('iquad=*',iquad,nnz+1)
+c      call prinf('nquad=*',nquad,1)
 c      call getnearquad_helm_comb_dir_2d(nch,norders,ixys,iptype,
 c     1  npts,srccoefs,srcinfo,8,npts,srcinfo,ich_id,ts_pts,
 c     2  eps,zpars,iquadtype,nnz,row_ptr,col_ind,iquad,nquad,
 c     3  wnear)
 
-      eps = 0.51d-7
-
+      call prin2('zpars=*',zpars,6)
       call lpcomp_helm_comb_dir_addsub_2d(nch,norders,ixys,
      1  iptype,npts,srccoefs,srcinfo,8,npts,srcinfo,eps,
      2  zpars,nnz,row_ptr,col_ind,iquad,nquad,wnear,sigma,
@@ -276,9 +286,11 @@ cc      call prinf('col_ind=*',col_ind,nnz)
 c
 c  Compute diagonal interpolation matrices 
 c
-      nslf0 = 15
+      nslf = 24
       allocate(tslf0(nslf),wslf0(nslf))
-      call load_selfquad_ipv0_iord2(tslf0,wslf0,nslf0)
+      call load_selfquad_ipv0_iord3(tslf0,wslf0,nslf0)
+      print *, "nslf=",nslf
+      print *, "nslf0=",nslf0
 
       print *, "done loading self quad"
 
@@ -320,8 +332,9 @@ c  Compute off diagonal interpolation matrices
 c
       m = 20
       iref = min(3,ceiling(2*log(k+0.0d0)/log(2.0d0)))
+      iref = 4
       print *, "iref=",iref
-      nmid = 3
+      nmid = 5
       nchquadadj = 2*(iref+1) + nmid
       
       mquad = m*nchquadadj
@@ -367,7 +380,7 @@ c
 
 c  start self quadrature now
         do inode=1,k
-          itarg = (ich-1)*j + inode
+          itarg = (ich-1)*k + inode
           call dgemm('n','n',6,2*nslf0,k,alpha,srcinfo(1,istart),8,
      1       xslfmat(1,1,inode),k,beta,srcoverslf,8)
           do j=1,2*nslf0
@@ -377,6 +390,7 @@ c  start self quadrature now
             woverslf(j) = ds*wslf(j,inode)
             call h2d_comb_stab(srcoverslf(1,j),8,srcinfo(1,itarg),
      1         rdotns,rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkernslf(j)) 
+            fkernslf(j) = fkernslf(j)*woverslf(j)
           enddo
           call zgemv('n',k,2*nslf0,zalpha,zpslfmat(1,1,inode),k,
      1       fkernslf,1,zbeta,zints(1,inode),1)
@@ -413,19 +427,19 @@ c
 c   insert quadrature at correct location
 c
         do j=1,k
-          itarg = (ich-1)*k + 1
+          itarg = (ich-1)*k + j
           icind = (row_ptr(itarg)+1-1)*k + 1
           do l=1,k
             wnearcoefs(icind + l-1) = zints(l,j)
             wnear(icind + l-1) = zints2(l,j)
           enddo
-          itarg = (il-1)*k+1
+          itarg = (il-1)*k+j
           icind = (row_ptr(itarg)-1)*k+1
           do l=1,k
             wnearcoefs(icind + l-1) = zints(l,j+k)
             wnear(icind + l-1) = zints2(l,j+k)
           enddo
-          itarg = (ir-1)*k+1
+          itarg = (ir-1)*k+j
           icind = (row_ptr(itarg)+2-1)*k+1
           do l=1,k
             wnearcoefs(icind + l-1) = zints(l,j+2*k)
