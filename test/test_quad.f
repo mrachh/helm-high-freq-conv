@@ -13,6 +13,7 @@
       integer, allocatable :: novers(:),ixyso(:)
       complex *16 zk,zpars(3),ima,z1,z2
       complex *16, allocatable :: sigmacoefs(:),potcoefs(:)
+      complex *16, allocatable :: potexcoefs(:)
       complex *16 fjvals(0:100),fhvals(0:100),fjders(0:100)
       complex *16 fhders(0:100),zfac
       real *8 xy_in(2),xy_out(2)
@@ -60,7 +61,7 @@
       call legeexps(itype,nover,tover,umo,vmo,wtsover)
 
 
-      nch = 14
+      nch = 12
       allocate(srcinfo(8,k*nch),qwts(k*nch))
       allocate(srccoefs(6,k*nch))
       allocate(srcover(8,nover*nch),wover(nover*nch))
@@ -70,7 +71,7 @@
       npts = nch*k
       npts_over = nch*nover
       allocate(sigma(npts),sigmacoefs(npts),pot(npts),potcoefs(npts))
-      allocate(potex(npts))
+      allocate(potex(npts),potexcoefs(npts))
       do ich=1,nch
         tstart = (ich-1.0d0)*h
         tend = (ich+0.0d0)*h
@@ -93,8 +94,10 @@
 
         call dgemm('n','t',6,k,k,alpha,srcinfo(1,istart),
      1    8,umat,k,beta,srccoefs(1,istart),6)
-        call prin2('tover*',tover,nover)
-        call prin2('wts=*',wtsover,nover)
+        call dgemm('n','t',2,k,k,alpha,sigma(istart),
+     1     2,umat,k,beta,sigmacoefs(istart),2)
+        call dgemm('n','t',2,k,k,alpha,potex(istart),
+     1     2,umat,k,beta,potexcoefs(istart),2)
         do j=1,nover
           ipt = (ich-1)*nover + j
           tuse = tstart + (tend-tstart)*(tover(j)+1)/2
@@ -120,9 +123,9 @@
       ra2 = sum(qwts)
       call prin2('Error in perimeter of circle=*',abs(ra-2*pi),1)
       call prin2('Error in perimeter of circle=*',abs(ra2-2*pi),1)
+      call prin2('sigma=*',sigma,32)
+      call prin2('sigmacoefs=*',sigmacoefs,32)
 
-
-      call prin2('srccoefs=*',srccoefs,96)
 
       isrc = 5
       itarg = 3
@@ -167,7 +170,7 @@ c
       call get_chunk_id_ts(nch,norders,ixys,iptype,npts,ich_id,ts_pts)
 
       print *, "starting trid quad"
-
+      print *, "nch=",nch
       call get_helm_dir_trid_quad_corr(zk,nch,k,npts,srcinfo,
      1   ixys,ich_id,ts_pts,ndz,zpars,nnz,row_ptr,col_ind,nquad,
      2   wnear,wnearcoefs)
@@ -206,7 +209,7 @@ c     3  wnear)
       erra = 0
       ra = 0
       do i=1,npts
-        pot(i) = pot(i) + sigma(i)/2
+        pot(i) = pot(i) + sigma(i)/2*zpars(3)
         erra = erra + abs(pot(i)-potex(i))**2
         ra = ra + abs(potex(i))**2
         if(i.le.5) print *, i,real(pot(i)),real(potex(i)),
@@ -215,9 +218,11 @@ c     3  wnear)
       erra = sqrt(erra/ra)
       call prin2('error in pot=*',erra,1)
 
-c      call lpcomp_galerkin_helm2d(nch,k,ixys,npts,
-c     1  srcinfo,8,npts,srcinfo,eps,zpars,nnz,row_ptr,col_ind,iquad,
-c     2  nquad,wnear,sigma,nover,npts_over,ixyso,srcover,wover,pot)
+      potcoefs = 0
+      call lpcomp_galerkin_helm2d(nch,k,ixys,npts,
+     1  srcinfo,eps,ndz,zpars,nnz,row_ptr,col_ind,iquad,
+     2  nquad,wnearcoefs,sigmacoefs,novers(1),npts_over,ixyso,
+     3  srcover,wover,potcoefs)
 
        
 
@@ -309,9 +314,9 @@ c
       do inode=1,k
         tm = ts(inode)
         do l=1,nslf0
-          tslf(l,inode) = (tslf0(l)+1)*(tm-tl)/2 + tl
+          tslf(l,inode) = (tslf0(l)+1.0d0)*(tm-tl)/2 + tl
           wslf(l,inode) = wslf0(l)*(tm-tl)/2
-          tslf(l+nslf0,inode) = (tslf0(l)+1)*(tr-tm)/2 + tm
+          tslf(l+nslf0,inode) = (tslf0(l)+1.0d0)*(tr-tm)/2 + tm
           wslf(l+nslf0,inode) = wslf0(l)*(tr-tm)/2
           call legepols(tslf(l,inode),k-1,pslfmat(1,l,inode))
           call legepols(tslf(l+nslf0,inode),k-1,
@@ -342,7 +347,6 @@ c
       allocate(tadj(mquad),wadj(mquad))
       call get_lege_adj_quad(m,nmid,iref,mquad,tadj,wadj)
       print *, "done getting adj quad"
-      
       allocate(xintermat(k,mquad),pmat(k,mquad))
       allocate(zpmat(k,mquad))
       do j=1,mquad
@@ -434,13 +438,13 @@ c
             wnear(icind + l-1) = zints2(l,j)
           enddo
           itarg = (il-1)*k+j
-          icind = (row_ptr(itarg)-1)*k+1
+          icind = (row_ptr(itarg)+2-1)*k+1
           do l=1,k
             wnearcoefs(icind + l-1) = zints(l,j+k)
             wnear(icind + l-1) = zints2(l,j+k)
           enddo
           itarg = (ir-1)*k+j
-          icind = (row_ptr(itarg)+2-1)*k+1
+          icind = (row_ptr(itarg)-1)*k+1
           do l=1,k
             wnearcoefs(icind + l-1) = zints(l,j+2*k)
             wnear(icind + l-1) = zints2(l,j+2*k)
@@ -476,11 +480,11 @@ c
         rpan = rpan*2
       enddo
       
-      do i=1,iref+2,iref+1+nmid
+      do i=iref+2,iref+1+nmid
         tchse(i+1) = tchse(i) + hpan
       enddo
       rpan = hpan/2
-      do i=iref+2,nch-1
+      do i=iref+2+nmid,nch-1
         tchse(i+1) = tchse(i) + rpan
         rpan = rpan/2
       enddo
@@ -490,11 +494,268 @@ c
         ipstart = (ich-1)*m
         h = tchse(ich+1) - tchse(ich)
         do i=1,m
-          t(ipstart+i) = tchse(ich) + h/2*(ts(i)+1)
+          t(ipstart+i) = tchse(ich) + h/2*(ts(i)+1.0d0)
           w(ipstart+i) = ws(i)*h/2
         enddo
       enddo
       
+      
+      return
+      end
+c
+c
+c
+c
+c
+c
+      subroutine lpcomp_galerkin_helm2d(nch,k,ixys,npts,
+     1  srcvals,eps,ndz,zpars,nnz,row_ptr,
+     2  col_ind,iquad,nquad,wnearcoefs,sigmacoefs,nover,
+     3  nptso,ixyso,srcover,whtsover,potcoefs)
+c
+c  This subroutine evaluates the helmholtz combined field
+c  layer potential in the Galerkin formulation
+c
+c
+      implicit real *8 (a-h,o-z)
+      integer nch,k,ixys(nch+1),npts,ndz
+      real *8 srcvals(8,npts),eps
+      complex *16 zpars(ndz)
+      integer nnz,row_ptr(npts+1),col_ind(nnz),iquad(nnz+1)
+      integer nquad
+      complex *16 wnearcoefs(nquad),sigmacoefs(npts)
+      integer nover,nptso,ixyso(nch+1)
+      real *8 srcover(8,nptso),whtsover(nptso)
+      complex *16 potcoefs(npts)
+
+      integer norder,npols,npolso
+      complex *16, allocatable :: potsort(:)
+
+      real *8, allocatable :: sources(:,:),targvals(:,:)
+      complex *16, allocatable :: charges(:),dipstr(:),sigmaover(:)
+      complex *16, allocatable :: pot(:)
+      real *8, allocatable :: dipvec(:,:)
+      integer ns,nt
+      real *8 dalpha,dbeta
+      complex *16 alpha,beta
+      integer ifcharge,ifdipole
+      integer ifpgh,ifpghtarg
+      complex *16 tmp(10),val
+
+      real *8 xmin,xmax,ymin,ymax,zmin,zmax,sizey,sizez,boxsize
+
+
+      integer i,j,jpatch,jquadstart,jstart
+
+
+      integer ifaddsub
+
+      integer ntj
+      
+      complex *16 zdotu,pottmp
+      real *8 radexp,epsfmm
+      real *8, allocatable :: tso(:),wso(:)
+      real *8, allocatable :: ts(:),umat(:,:),vmat(:,:),wts(:)
+      real *8, allocatable :: pmat(:,:)
+      real *8 umato,vmato
+
+      integer ipars
+      real *8 dpars,timeinfo(10),t1,t2,omp_get_wtime
+
+      real *8, allocatable :: radsrc(:)
+      real *8, allocatable :: srctmp2(:,:)
+      complex *16, allocatable :: ctmp2(:),dtmp2(:)
+      real *8, allocatable :: dipvec2(:,:)
+      real *8 thresh,ra
+      real *8 rr,rmin
+      real *8 over4pi
+      integer nss,ii,l,npover
+      integer nmax,ier,iper
+
+      integer nd,ntarg0
+
+      real *8 ttot,done,pi
+
+      parameter (nd=1,ntarg0=1)
+
+      ns = nptso
+      ntarg = npts
+      done = 1
+      pi = atan(done)*4
+
+      itype = 2
+      allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
+      call legeexps(itype,k,ts,umat,vmat,wts)
+
+      itype = 1
+      allocate(tso(nover),wso(nover),pot(npts))
+      call legeexps(itype,nover,tso,umato,vmato,wso)
+
+
+c
+c    estimate max number of sources in neear field of 
+c    any target
+c
+      nmax = 0
+      call get_near_corr_max2d(ntarg,row_ptr,nnz,col_ind,nch,
+     1  ixyso,nmax)
+      allocate(srctmp2(2,nmax),ctmp2(nmax),dtmp2(nmax))
+      allocate(dipvec2(2,nmax))
+           
+      ifpgh = 0
+      ifpghtarg = 1
+      allocate(sources(2,ns),targvals(2,ntarg))
+      allocate(charges(ns),dipstr(ns),dipvec(2,ns))
+      allocate(sigmaover(ns))
+
+c 
+c   evaluate density at oversampled nodes: assumes all
+c   oversampled orders are identical
+c
+      allocate(pmat(k,nover))
+      do i=1,nover
+        call legeexps(tso(i),k-1,pmat(1,i))
+      enddo
+      
+      dalpha = 1.0d0
+      dbeta = 0.0d0
+      do i=1,nch
+        istart = ixys(i)
+        istarto = ixyso(i)
+        call dgemm('n','n',2,nover,k,dalpha,sigmacoefs(istart),2,pmat,
+     1    k,dbeta,sigmaover(istarto),2)
+      enddo
+c
+c       set relevatn parameters for the fmm
+c
+      alpha = zpars(2)
+      beta = zpars(3)
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)      
+      do i=1,ns
+        sources(1,i) = srcover(1,i)
+        sources(2,i) = srcover(2,i)
+
+        charges(i) = sigmaover(i)*whtsover(i)*alpha
+        dipstr(i) = sigmaover(i)*whtsover(i)*beta
+        dipvec(1,i) = srcover(7,i)
+        dipvec(2,i) = srcover(8,i)
+      enddo
+C$OMP END PARALLEL DO      
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
+      do i=1,ntarg
+        targvals(1,i) = srcvals(1,i)
+        targvals(2,i) = srcvals(2,i)
+      enddo
+C$OMP END PARALLEL DO      
+
+      ifcharge = 1
+      ifdipole = 1
+
+      if(alpha.eq.0) ifcharge = 0
+      if(beta.eq.0) ifdipole = 0
+
+c
+c
+c       call the fmm
+c
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()      
+      call hfmm2d(nd,eps,zpars(1),ns,sources,ifcharge,charges,
+     1  ifdipole,dipstr,dipvec,iper,ifpgh,tmp,tmp,tmp,ntarg,
+     1  targvals,ifpghtarg,pot,tmp,tmp,ier)
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()
+
+            
+      timeinfo(1) = t2-t1
+
+
+c
+c        compute threshold for ignoring local computation
+c
+      call get_fmm2d_thresh(2,ns,sources,2,ntarg,targvals,thresh)
+
+
+c
+c       add in precomputed quadrature
+
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart)
+C$OMP$PRIVATE(jstart,pottmp,npols,l)
+      do i=1,ntarg
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          npols = ixys(jpatch+1)-ixys(jpatch)
+          jquadstart = iquad(j)
+          jstart = ixys(jpatch) 
+          do l=1,npols
+             pot(i) = pot(i)+wnearcoefs(jquadstart+l-1)*
+     1         sigmacoefs(jstart+l-1)
+          enddo
+        enddo
+      enddo
+C$OMP END PARALLEL DO
+
+c
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2)
+C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,npover)
+      do i=1,ntarg
+        nss = 0
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          do l=ixyso(jpatch),ixyso(jpatch+1)-1
+            nss = nss+1
+            srctmp2(1,nss) = srcover(1,l)
+            srctmp2(2,nss) = srcover(2,l)
+
+            if(ifcharge.eq.1) ctmp2(nss) = charges(l)
+            if(ifdipole.eq.1) then
+              dtmp2(nss) = dipstr(l)
+              dipvec2(1,nss) = dipvec(1,l)
+              dipvec2(2,nss) = dipvec(2,l)
+            endif
+          enddo
+        enddo
+
+        val = 0
+        if(ifcharge.eq.1.and.ifdipole.eq.0) then
+          call h2d_directcp(nd,zpars(1),srctmp2,nss,ctmp2,
+     1        targvals(1,i),1,val,thresh)
+        endif
+
+        if(ifcharge.eq.0.and.ifdipole.eq.1) then
+          call h2d_directdp(nd,zpars(1),srctmp2,nss,dtmp2,
+     1          dipvec2,targvals(1,i),1,val,thresh)
+        endif
+
+        if(ifcharge.eq.1.and.ifdipole.eq.1) then
+          call h2d_directcdp(nd,zpars(1),srctmp2,nss,ctmp2,dtmp2,
+     1          dipvec2,targvals(1,i),1,val,thresh)
+        endif
+        pot(i) = pot(i) - val
+      enddo
+      
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()     
+
+      timeinfo(2) = t2-t1
+
+
+cc      call prin2('quadrature time=*',timeinfo,2)
+      
+      ttot = timeinfo(1) + timeinfo(2)
+cc      call prin2('time in lpcomp=*',ttot,1)
+      do i=1,nch
+        istart = ixys(i)
+        call dgemm('n','t',2,k,k,dalpha,pot(istart),2,umat,k,dbeta,
+     1     potcoefs(istart),2)
+      enddo
+
       
       return
       end
