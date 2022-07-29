@@ -1,19 +1,25 @@
       implicit real *8 (a-h,o-z)
       real *8, allocatable :: srcinfo(:,:),qwts(:),srccoefs(:,:)
+      real *8, allocatable :: srcinfog(:,:),qwtsg(:)
       real *8, allocatable :: srcover(:,:),wover(:)
       real *8, allocatable :: ts(:),umat(:,:),vmat(:,:),wts(:)
+      real *8, allocatable :: tsg(:),umatg(:,:),vmatg(:,:),wtsg(:)
       real *8, allocatable :: tover(:),wtsover(:)
       real *8 umo,vmo
       complex *16, allocatable :: sigma(:),potex(:),pot(:)
+      complex *16, allocatable :: sigmag(:),potexg(:)
       integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
+      integer, allocatable :: row_ptrg(:),col_indg(:),iquadg(:)
       complex *16, allocatable :: wnear(:),wnearcoefs(:)
+      complex *16, allocatable :: wnearg(:),wnearcoefsg(:)
       integer, allocatable :: ich_id(:)
       real *8, allocatable :: ts_pts(:)
-      integer, allocatable :: norders(:),ixys(:),iptype(:)
+      integer, allocatable :: norders(:),ixys(:),iptype(:),ixysg(:)
       integer, allocatable :: novers(:),ixyso(:)
       complex *16 zk,zpars(3),ima,z1,z2
+      complex *16, allocatable :: sigmacoefsg(:),potcoefsg(:)
       complex *16, allocatable :: sigmacoefs(:),potcoefs(:)
-      complex *16, allocatable :: potexcoefs(:)
+      complex *16, allocatable :: potexcoefsg(:),potexcoefs(:)
       complex *16 fjvals(0:100),fhvals(0:100),fjders(0:100)
       complex *16 fhders(0:100),zfac
       real *8 xy_in(2),xy_out(2)
@@ -49,12 +55,23 @@
 
       alpha = 1.0d0
       beta = 0.0d0
+c
+c  k is the boundary discretization order
+c
+c  kg is the galerkin polynomial order
+c
+c  nover is the oversampled source order
+c
 
-      k = 16
+      k = 20
+      kg = 12
       nover = 24
       itype = 2
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
       call legeexps(itype,k,ts,umat,vmat,wts)
+
+      allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
+      call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
       allocate(tover(nover),wtsover(nover))
       itype = 1
@@ -62,19 +79,32 @@
 
 
       nch = 12
-      allocate(srcinfo(8,k*nch),qwts(k*nch))
+      allocate(srcinfo(8,k*nch),qwts(k*nch),qwtsg(kg*nch))
+      allocate(srcinfog(8,kg*nch))
       allocate(srccoefs(6,k*nch))
       allocate(srcover(8,nover*nch),wover(nover*nch))
       allocate(norders(nch),iptype(nch),ixys(nch+1))
-      allocate(novers(nch),ixyso(nch+1))
+      allocate(novers(nch),ixyso(nch+1),ixysg(nch+1))
       h = 2*pi/(nch+0.0d0)
       npts = nch*k
       npts_over = nch*nover
-      allocate(sigma(npts),sigmacoefs(npts),pot(npts),potcoefs(npts))
-      allocate(potex(npts),potexcoefs(npts))
+      nptsg = nch*kg
+
+      print *, "nptsg=",nptsg
+      allocate(sigma(npts),sigmacoefsg(nptsg),pot(npts))
+      allocate(sigmag(nptsg))
+      allocate(potcoefsg(nptsg))
+      allocate(sigmacoefs(npts),potcoefs(npts))
+      allocate(potexcoefs(npts))
+
+      allocate(potex(npts),potexg(nptsg),potexcoefsg(nptsg))
       do ich=1,nch
         tstart = (ich-1.0d0)*h
         tend = (ich+0.0d0)*h
+c
+c  get source info
+c
+
         do j=1,k
           ipt = (ich-1)*k + j
           tuse = tstart + (tend-tstart)*(ts(j)+1)/2
@@ -98,6 +128,33 @@
      1     2,umat,k,beta,sigmacoefs(istart),2)
         call dgemm('n','t',2,k,k,alpha,potex(istart),
      1     2,umat,k,beta,potexcoefs(istart),2)
+c
+c  get density info
+c
+        do j=1,kg
+          ipt = (ich-1)*kg + j
+          tuse = tstart + (tend-tstart)*(tsg(j)+1)/2
+          srcinfog(1,ipt) = cos(tuse)
+          srcinfog(2,ipt) = sin(tuse)
+          srcinfog(3,ipt) = -sin(tuse)*h/2
+          srcinfog(4,ipt) = cos(tuse)*h/2
+          srcinfog(5,ipt) = -cos(tuse)*h*h/2/2
+          srcinfog(6,ipt) = -sin(tuse)*h*h/2/2
+          srcinfog(7,ipt) = cos(tuse)
+          srcinfog(8,ipt) = sin(tuse)
+          sigmag(ipt) = exp(ima*(imode+0.0d0)*tuse)
+          potexg(ipt) = zfac*sigmag(ipt)
+          qwtsg(ipt) = h/2*wtsg(j)
+        enddo
+        istart = (ich-1)*kg + 1
+        call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),
+     1     2,umatg,kg,beta,sigmacoefsg(istart),2)
+        call dgemm('n','t',2,kg,kg,alpha,potexg(istart),
+     1     2,umatg,kg,beta,potexcoefsg(istart),2)
+
+c 
+c  get oversampled fun info
+c    
         do j=1,nover
           ipt = (ich-1)*nover + j
           tuse = tstart + (tend-tstart)*(tover(j)+1)/2
@@ -116,9 +173,11 @@
         ixys(ich) = (ich-1)*k+1
         novers(ich) = nover
         ixyso(ich) = (ich-1)*nover + 1
+        ixysg(ich) = (ich-1)*kg+1
       enddo
       ixys(nch+1) = npts+1
       ixyso(nch+1) = npts_over+1
+      ixysg(nch+1) = nptsg+1
       ra = sum(wover)
       ra2 = sum(qwts)
       call prin2('Error in perimeter of circle=*',abs(ra-2*pi),1)
@@ -163,23 +222,37 @@ c
       nnz = 3*k*nch
       nquad = nnz*k
 
+      nnzg = 3*kg*nch
+      nquadg = nnz*kg
+
       allocate(row_ptr(npts+1),col_ind(nnz),wnear(nquad))
       allocate(wnearcoefs(nquad))
+      allocate(row_ptrg(nptsg+1),col_indg(nnzg),wnearg(nquadg))
+      allocate(wnearcoefsg(nquadg))
 
-      allocate(ich_id(npts),ts_pts(npts))
-      call get_chunk_id_ts(nch,norders,ixys,iptype,npts,ich_id,ts_pts)
+
 
       print *, "starting trid quad"
       print *, "nch=",nch
-      call get_helm_dir_trid_quad_corr(zk,nch,k,npts,srcinfo,
-     1   ixys,ich_id,ts_pts,ndz,zpars,nnz,row_ptr,col_ind,nquad,
-     2   wnear,wnearcoefs)
-      allocate(iquad(nnz+1))
+      call get_helm_dir_trid_quad_corr(zk,nch,k,k,npts,npts,srcinfo,
+     1   srcinfo,ndz,zpars,nnz,row_ptr,col_ind,nquad,wnear,wnearcoefs)
+
+      call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,srcinfo,
+     1   srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,wnearg,
+     2   wnearcoefsg)
+
+
+      allocate(iquad(nnz+1),iquadg(nnzg+1))
       call prinf('nch=*',nch,1)
       call prinf('npts=*',npts,1)
       call prinf('nnz=*',nnz,1)
 c      call prinf('ixys=*',ixys,nch+1)
       call get_iquad_rsc2d(nch,ixys,npts,nnz,row_ptr,col_ind,iquad)
+
+      call prinf('ixysg=*',ixysg,nch+1)
+      stop
+      call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
+     1   iquadg)
       iquadtype = 1
       eps = 0.51d-11
 
@@ -216,6 +289,23 @@ c      call prinf('ixys=*',ixys,nch+1)
 
       erra = sqrt(erra/ra)
       call prin2('error in pot galerkin=*',erra,1)
+      stop
+
+      potcoefsg = 0
+      call lpcomp_galerkin_helm2d(nch,kg,ixysg,nptsg,
+     1  srcinfog,eps,ndz,zpars,nnzg,row_ptrg,col_indg,iquadg,
+     2  nquadg,wnearcoefsg,sigmacoefsg,novers(1),npts_over,ixyso,
+     3  srcover,wover,potcoefsg)
+      erra = 0
+      ra = 0
+      do i=1,nptsg
+        potcoefsg(i) = potcoefsg(i) + sigmacoefsg(i)/2*zpars(3)
+        erra = erra + abs(potcoefsg(i)-potexcoefsg(i))**2
+        ra = ra + abs(potexcoefsg(i))**2
+      enddo
+
+      erra = sqrt(erra/ra)
+      call prin2('error in pot galerkin=*',erra,1)
 
        
 
@@ -225,22 +315,21 @@ c      call prinf('ixys=*',ixys,nch+1)
 
 
 
-      subroutine get_helm_dir_trid_quad_corr(zk,nch,k,npts,srcinfo,ixys,
-     1   ich_id,ts_pts,ndz,zpars,nnz,row_ptr,col_ind,nquad,wnear,
-     2   wnearcoefs)
+      subroutine get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
+     1   srcinfo,srcinfog,ndz,zpars,nnz,row_ptr,
+     2   col_ind,nquad,wnear,wnearcoefs)
       implicit real *8 (a-h,o-z)
       complex *16 zk
-      integer nch,k,npts
-      real *8 srcinfo(8,npts)
-      integer ixys(nch+1),ich_id(npts)
-      real *8 ts_pts(npts)
-      integer nnz,nquad,row_ptr(npts+1),col_ind(nnz)
+      integer nch,k,npts,kg,nptsg
+      real *8 srcinfo(8,npts),srcinfog(8,nptsg)
+      integer nnz,nquad,row_ptr(nptsg+1),col_ind(nnz)
       complex *16 wnear(nquad),wnearcoefs(nquad)
       real *8, allocatable :: tadj(:),wadj(:)
       real *8, allocatable :: srcover(:,:),wover(:)
       real *8, allocatable :: srcoverslf(:,:),woverslf(:)
       real *8, allocatable :: xintermat(:,:),umat(:,:),vmat(:,:)
       real *8, allocatable :: ts(:),wts(:),pmat(:,:)
+      real *8, allocatable :: tsg(:),wtsg(:),umatg(:,:),vmatg(:,:)
       real *8, allocatable :: tslf0(:),wslf0(:)
       real *8, allocatable :: tslf(:,:),wslf(:,:),xslfmat(:,:,:)
       real *8, allocatable :: pslfmat(:,:,:)
@@ -253,13 +342,19 @@ c
 c  get legendre nodes and weights
 c
 
+c
+c  Assumption k>=kg
+c
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
 
       itype = 2
       call legeexps(itype,k,ts,umat,vmat,wts)
       
+      allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
+      call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
+      
 
-      do i=1,npts+1
+      do i=1,nptsg+1
         row_ptr(i) = (i-1)*3+1
       enddo
 c
@@ -270,7 +365,7 @@ c
         ir = ich+1
         if(il.le.0) il = nch
         if(ir.gt.nch) ir = 1
-        do j=1,k
+        do j=1,kg
           ipt = (ich-1)*k + j
           col_ind(row_ptr(ipt)) = il
           col_ind(row_ptr(ipt)+1) = ich
@@ -292,11 +387,10 @@ c
 
       print *, "done loading self quad"
 
-
-      allocate(tslf(2*nslf0,k),wslf(2*nslf0,k))
-      allocate(xslfmat(k,2*nslf0,k))
-      allocate(pslfmat(k,2*nslf0,k))
-      allocate(zpslfmat(k,2*nslf0,k))
+      allocate(tslf(2*nslf0,kg),wslf(2*nslf0,kg))
+      allocate(xslfmat(k,2*nslf0,kg))
+      allocate(pslfmat(k,2*nslf0,kg))
+      allocate(zpslfmat(k,2*nslf0,kg))
       alpha = 1.0d0
       beta = 0.0d0
       zalpha = 1.0d0
@@ -304,8 +398,8 @@ c
 
       tl = -1.0d0
       tr = 1.0d0
-      do inode=1,k
-        tm = ts(inode)
+      do inode=1,kg
+        tm = tsg(inode)
         do l=1,nslf0
           tslf(l,inode) = (tslf0(l)+1.0d0)*(tm-tl)/2 + tl
           wslf(l,inode) = wslf0(l)*(tm-tl)/2
@@ -358,12 +452,12 @@ c     j \in[1,k] then target on self, if j\in [k+1,2*k], then
 c     target on left panel, and if j \in[2*k+1,3*k] then target
 c     on right panel
 c
-      allocate(zints(k,3*k),zints2(k,3*k))
+      allocate(zints(kg,3*kg),zints2(kg,3*kg))
       ndd = 0
       ndi = 0
 
       allocate(srcover(8,mquad),wover(mquad))
-      allocate(fkern(mquad,2*k))
+      allocate(fkern(mquad,2*kg))
       allocate(fkernslf(2*nslf0))
       allocate(srcoverslf(8,2*nslf0),woverslf(2*nslf0))
       rdotns = -0.5d0
@@ -376,8 +470,8 @@ c
         if(ir.gt.nch) ir = 1
 
 c  start self quadrature now
-        do inode=1,k
-          itarg = (ich-1)*k + inode
+        do inode=1,kg
+          itarg = (ich-1)*kg + inode
           call dgemm('n','n',6,2*nslf0,k,alpha,srcinfo(1,istart),8,
      1       xslfmat(1,1,inode),k,beta,srcoverslf,8)
           do j=1,2*nslf0
@@ -385,11 +479,11 @@ c  start self quadrature now
             srcoverslf(7,j) = srcoverslf(4,j)/ds
             srcoverslf(8,j) = -srcoverslf(3,j)/ds
             woverslf(j) = ds*wslf(j,inode)
-            call h2d_comb_stab(srcoverslf(1,j),8,srcinfo(1,itarg),
+            call h2d_comb_stab(srcoverslf(1,j),8,srcinfog(1,itarg),
      1         rdotns,rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkernslf(j)) 
             fkernslf(j) = fkernslf(j)*woverslf(j)
           enddo
-          call zgemv('n',k,2*nslf0,zalpha,zpslfmat(1,1,inode),k,
+          call zgemv('n',kg,2*nslf0,zalpha,zpslfmat(1,1,inode),k,
      1       fkernslf,1,zbeta,zints(1,inode),1)
         enddo
 c
@@ -404,43 +498,43 @@ c
           wover(j) = ds*wadj(j)
         enddo
 
-        do j=1,k
-          itargl = (il-1)*k + j 
-          itargr = (ir-1)*k + j
+        do j=1,kg
+          itargl = (il-1)*kg + j 
+          itargr = (ir-1)*kg + j
           do l=1,mquad
-            call h2d_comb_stab(srcover(1,l),8,srcinfo(1,itargl),rdotns,
+            call h2d_comb_stab(srcover(1,l),8,srcinfog(1,itargl),rdotns,
      1         rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j))
             fkern(l,j) = fkern(l,j)*wover(l)
-            call h2d_comb_stab(srcover(1,l),8,srcinfo(1,itargr),rdotns,
-     1         rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j+k)) 
-            fkern(l,j+k) = fkern(l,j+k)*wover(l)
+            call h2d_comb_stab(srcover(1,l),8,srcinfog(1,itargr),rdotns,
+     1         rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j+kg)) 
+            fkern(l,j+kg) = fkern(l,j+kg)*wover(l)
           enddo
         enddo
-        call zgemm('n','n',k,2*k,mquad,zalpha,zpmat,k,fkern,mquad,
-     1     zbeta,zints(1,k+1),k)
-        call zrmatmatt(3*k,k,zints,k,umat,zints2)
+        call zgemm('n','n',kg,2*kg,mquad,zalpha,zpmat,k,fkern,mquad,
+     1     zbeta,zints(1,kg+1),kg)
+        call zrmatmatt(3*kg,kg,zints,k,umatg,zints2)
 c
 c
 c   insert quadrature at correct location
 c
-        do j=1,k
-          itarg = (ich-1)*k + j
+        do j=1,kg
+          itarg = (ich-1)*kg + j
           icind = (row_ptr(itarg)+1-1)*k + 1
-          do l=1,k
+          do l=1,kg
             wnearcoefs(icind + l-1) = zints(l,j)
             wnear(icind + l-1) = zints2(l,j)
           enddo
-          itarg = (il-1)*k+j
-          icind = (row_ptr(itarg)+2-1)*k+1
-          do l=1,k
-            wnearcoefs(icind + l-1) = zints(l,j+k)
-            wnear(icind + l-1) = zints2(l,j+k)
+          itarg = (il-1)*kg+j
+          icind = (row_ptr(itarg)+2-1)*kg+1
+          do l=1,kg
+            wnearcoefs(icind + l-1) = zints(l,j+kg)
+            wnear(icind + l-1) = zints2(l,j+kg)
           enddo
-          itarg = (ir-1)*k+j
-          icind = (row_ptr(itarg)-1)*k+1
-          do l=1,k
-            wnearcoefs(icind + l-1) = zints(l,j+2*k)
-            wnear(icind + l-1) = zints2(l,j+2*k)
+          itarg = (ir-1)*kg+j
+          icind = (row_ptr(itarg)-1)*kg+1
+          do l=1,kg
+            wnearcoefs(icind + l-1) = zints(l,j+2*kg)
+            wnear(icind + l-1) = zints2(l,j+2*kg)
           enddo
         enddo
       enddo
