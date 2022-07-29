@@ -236,10 +236,13 @@ c
       print *, "nch=",nch
       call get_helm_dir_trid_quad_corr(zk,nch,k,k,npts,npts,srcinfo,
      1   srcinfo,ndz,zpars,nnz,row_ptr,col_ind,nquad,wnear,wnearcoefs)
-
+      
       call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,srcinfo,
      1   srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,wnearg,
      2   wnearcoefsg)
+c      call get_helm_dir_trid_quad_corr(zk,nch,kg,kg,nptsg,nptsg,
+c     1   srcinfog,srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,
+c     2   wnearg,wnearcoefsg)
 
 
       allocate(iquad(nnz+1),iquadg(nnzg+1))
@@ -250,7 +253,6 @@ c      call prinf('ixys=*',ixys,nch+1)
       call get_iquad_rsc2d(nch,ixys,npts,nnz,row_ptr,col_ind,iquad)
 
       call prinf('ixysg=*',ixysg,nch+1)
-      stop
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
       iquadtype = 1
@@ -289,9 +291,13 @@ c      call prinf('ixys=*',ixys,nch+1)
 
       erra = sqrt(erra/ra)
       call prin2('error in pot galerkin=*',erra,1)
-      stop
 
       potcoefsg = 0
+      call prinf('ixysg=*',ixysg,nch+1)
+      call prinf('nptsg=*',nptsg,1)
+      call prin2('srcinfog=*',srcinfog,24)
+      call prinf('nnzg=*',nnzg,1)
+      call prinf('row_ptrg=*',row_ptrg,nptsg+1)
       call lpcomp_galerkin_helm2d(nch,kg,ixysg,nptsg,
      1  srcinfog,eps,ndz,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,sigmacoefsg,novers(1),npts_over,ixyso,
@@ -301,11 +307,16 @@ c      call prinf('ixys=*',ixys,nch+1)
       do i=1,nptsg
         potcoefsg(i) = potcoefsg(i) + sigmacoefsg(i)/2*zpars(3)
         erra = erra + abs(potcoefsg(i)-potexcoefsg(i))**2
+        if(i.le.5) print *, real(potcoefsg(i)),real(potexcoefsg(i)),
+     1      real(potcoefsg(i))/real(potexcoefsg(i))
         ra = ra + abs(potexcoefsg(i))**2
       enddo
+      call prin2('potexcoefs=*',potexcoefs,42)
+      call prin2('potexcoefsg=*',potexcoefsg,34)
 
       erra = sqrt(erra/ra)
       call prin2('error in pot galerkin=*',erra,1)
+      stop
 
        
 
@@ -357,6 +368,7 @@ c
       do i=1,nptsg+1
         row_ptr(i) = (i-1)*3+1
       enddo
+      call prinf('row_ptr=*',row_ptr,nptsg+1)
 c
 c  set up row_ptr and col_ind for this case
 c
@@ -366,7 +378,7 @@ c
         if(il.le.0) il = nch
         if(ir.gt.nch) ir = 1
         do j=1,kg
-          ipt = (ich-1)*k + j
+          ipt = (ich-1)*kg + j
           col_ind(row_ptr(ipt)) = il
           col_ind(row_ptr(ipt)+1) = ich
           col_ind(row_ptr(ipt)+2) = ir
@@ -512,14 +524,14 @@ c
         enddo
         call zgemm('n','n',kg,2*kg,mquad,zalpha,zpmat,k,fkern,mquad,
      1     zbeta,zints(1,kg+1),kg)
-        call zrmatmatt(3*kg,kg,zints,k,umatg,zints2)
+        call zrmatmatt(3*kg,kg,zints,kg,umatg,zints2)
 c
 c
 c   insert quadrature at correct location
 c
         do j=1,kg
           itarg = (ich-1)*kg + j
-          icind = (row_ptr(itarg)+1-1)*k + 1
+          icind = (row_ptr(itarg)+1-1)*kg + 1
           do l=1,kg
             wnearcoefs(icind + l-1) = zints(l,j)
             wnear(icind + l-1) = zints2(l,j)
