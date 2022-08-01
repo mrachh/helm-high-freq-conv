@@ -205,8 +205,7 @@ C$       t1 = omp_get_wtime()
 C$       t2 = omp_get_wtime()     
       call prin2('total quad gen time=*',t2-t1,1)
       call prinf('nnzg=*',nnzg,1)
-      call prinf('row_ptrg=*',row_ptrg,nch+1)
-      stop
+      call prinf('row_ptrg=*',row_ptrg,nptsg+1)
 
 
       allocate(iquadg(nnzg+1))
@@ -217,7 +216,6 @@ C$       t2 = omp_get_wtime()
 
       potcoefsg = 0
       print *, "novers=",novers(1)
-      stop
       call lpcomp_galerkin_helm2d(nch,kg,ixysg,nptsg,
      1  srcinfog,eps,ndz,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,sigmacoefsg,novers(1),npts_over,ixyso,
