@@ -7,21 +7,27 @@
       real *8, allocatable :: tsg(:),umatg(:,:),vmatg(:,:),wtsg(:)
       real *8, allocatable :: tover(:),wtsover(:)
       real *8 umo,vmo
-      complex *16, allocatable :: sigmag(:),sigmacoefsg(:),solncoefsg(:)
-      complex *16, allocatable :: solng(:)
+      complex *16, allocatable :: sigma(:),potex(:),pot(:)
+      complex *16, allocatable :: sigmag(:),potexg(:)
+      integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
       integer, allocatable :: row_ptrg(:),col_indg(:),iquadg(:)
+      complex *16, allocatable :: wnear(:),wnearcoefs(:)
       complex *16, allocatable :: wnearg(:),wnearcoefsg(:)
       integer, allocatable :: ich_id(:)
       real *8, allocatable :: ts_pts(:)
       integer, allocatable :: norders(:),ixys(:),iptype(:),ixysg(:)
       integer, allocatable :: nordersg(:)
       integer, allocatable :: novers(:),ixyso(:)
-      complex *16 zk,zpars(3),ima,z1,z2,ztmp
-      complex *16 pottarg,pottargex
-      real *8 xyin(2),xyout(2)
+      complex *16 zk,zpars(3),ima,z1,z2
+      complex *16, allocatable :: sigmacoefsg(:),potcoefsg(:)
+      complex *16, allocatable :: sigmacoefs(:),potcoefs(:)
+      complex *16, allocatable :: potexcoefsg(:),potexcoefs(:)
+      complex *16, allocatable :: solncoefsg(:),solnexcoefsg(:),
+     1   solnexg(:)
+      complex *16 fjvals(0:100),fhvals(0:100),fjders(0:100)
       real *8 dpars(1)
       real *8, allocatable :: errs(:)
-      complex *16 zfac
+      complex *16 fhders(0:100),zfac
       real *8 xy_in(2),xy_out(2)
       data ima/(0.0d0,1.0d0)/
       external circ_geom
@@ -39,6 +45,18 @@
       zpars(1) = zk
       zpars(2) = -ima*zk
       zpars(3) = 1.0d0
+
+      imode = 7
+
+      nterms = imode + 5
+      rscale = 1.0d0
+      ifder = 1
+      call jbessel2d(nterms,zk,rscale,fjvals,ifder,fjders)
+      call h2dall(nterms,zk,rscale,fhvals,ifder,fhders)
+
+
+      zfac = pi/2*ima*zk*fjders(imode)*fhvals(imode)*zpars(3)
+      zfac = zfac + pi/2*ima*fjvals(imode)*fhvals(imode)*zpars(2)
 
       alpha = 1.0d0
       beta = 0.0d0
@@ -112,31 +130,53 @@ c
 
       h = 2*pi/(nch+0.0d0)
       print *, "nptsg=",nptsg
-      allocate(sigmag(nptsg),sigmacoefsg(nptsg),solncoefsg(nptsg))
-      allocate(solng(nptsg))
+      allocate(sigma(npts),sigmacoefsg(nptsg),pot(npts))
+      allocate(sigmag(nptsg))
+      allocate(potcoefsg(nptsg),solncoefsg(nptsg),solnexcoefsg(nptsg))
+      allocate(solnexg(nptsg))
+      allocate(sigmacoefs(npts),potcoefs(npts))
+      allocate(potexcoefs(npts))
 
-      xyin(1) = 0.1d0
-      xyin(2) = -0.33d0
-
-      xyout(1) = 3.5d0
-      xyout(2) = 3.3d0
+      allocate(potex(npts),potexg(nptsg),potexcoefsg(nptsg))
 
 c
 c  get density info
 c
       do ich=1,nch
+
+        do j=1,k
+          ipt = (ich-1)*k + j
+          tuse = ts1(ipt)
+          sigma(ipt) = exp(ima*(imode+0.0d0)*tuse)
+          potex(ipt) = zfac*sigma(ipt)
+        enddo
+        istart = (ich-1)*k+1
+
+        call dgemm('n','t',2,k,k,alpha,sigma(istart),
+     1     2,umat,k,beta,sigmacoefs(istart),2)
+        call dgemm('n','t',2,k,k,alpha,potex(istart),
+     1     2,umat,k,beta,potexcoefs(istart),2)
         do j=1,kg
           ipt = (ich-1)*kg + j
-          call h2d_slp(srcinfog(1,ipt),2,xyin,ndd,dpars,1,zk,ndi,
-     1       ipars,sigmag(ipt))
-          solncoefsg(ipt) = 0.0d0
+          tuse = ts1g(ipt) 
+          sigmag(ipt) = exp(ima*(imode+0.0d0)*tuse)
+          potexg(ipt) = zfac*sigmag(ipt)
+          solnexg(ipt) = sigmag(ipt)/zfac
         enddo
         istart = (ich-1)*kg + 1
         call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),
      1     2,umatg,kg,beta,sigmacoefsg(istart),2)
+        call dgemm('n','t',2,kg,kg,alpha,potexg(istart),
+     1     2,umatg,kg,beta,potexcoefsg(istart),2)
+        call dgemm('n','t',2,kg,kg,alpha,solnexg(istart),
+     1     2,umatg,kg,beta,solnexcoefsg(istart),2)
       enddo
       ra = sum(wover)
       ra2 = sum(qwts)
+      call prin2('Error in perimeter of circle=*',abs(ra-2*pi),1)
+      call prin2('Error in perimeter of circle=*',abs(ra2-2*pi),1)
+      call prin2('sigma=*',sigma,32)
+      call prin2('sigmacoefs=*',sigmacoefs,32)
 
 
 c
@@ -176,6 +216,26 @@ C$       t2 = omp_get_wtime()
       iquadtype = 1
       eps = 0.51d-14
 
+      potcoefsg = 0
+      print *, "novers=",novers(1)
+      call lpcomp_galerkin_helm2d(nch,kg,ixysg,nptsg,
+     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
+     2  nquadg,wnearcoefsg,sigmacoefsg,novers(1),npts_over,ixyso,
+     3  srcover,wover,potcoefsg)
+      erra = 0
+      ra = 0
+      do i=1,nptsg
+        potcoefsg(i) = potcoefsg(i) + sigmacoefsg(i)/2*zpars(3)
+        erra = erra + abs(potcoefsg(i)-potexcoefsg(i))**2
+        if(i.le.5) print *, real(potcoefsg(i)),real(potexcoefsg(i)),
+     1      real(potcoefsg(i))/real(potexcoefsg(i))
+        ra = ra + abs(potexcoefsg(i))**2
+      enddo
+
+      erra = sqrt(erra/ra)
+      call prin2('error in pot galerkin=*',erra,1)
+
+      
       niter = 0
       numit = max(ceiling(10*abs(zk)),200)
       allocate(errs(numit+1))
@@ -185,23 +245,18 @@ C$       t2 = omp_get_wtime()
      2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
      3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
      4  solncoefsg)
-
-      call h2d_slp(xyout,2,xyin,ndd,dpars,1,zk,ndi,ipars,pottargex)
-      do i=1,nch
-        istart = (i-1)*kg+1
-        call dgemm('n','t',2,kg,kg,alpha,solncoefsg(istart),
-     1     2,vmatg,kg,beta,solng(istart),2)
-      enddo
-
-      pottarg = 0
+      erra = 0
+      ra = 0
       do i=1,nptsg
-        call h2d_comb(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
-     1     ndi,ipars,ztmp)
-        pottarg = pottarg + ztmp*qwtsg(i)*solng(i)
+        erra = erra + abs(solncoefsg(i)-solnexcoefsg(i))**2
+        if(i.le.5) print *, real(solncoefsg(i)),real(solnexcoefsg(i)),
+     1      real(solncoefsg(i))/real(solnexcoefsg(i))
+        ra = ra + abs(solnexcoefsg(i))**2
       enddo
-      call prin2_long('pottarg=*',pottarg,2)
-      call prin2_long('pottargex=*',pottargex,2)
-      print *, "erra=",abs(pottarg-pottargex)/abs(pottargex)
+
+      erra = sqrt(erra/ra)
+      call prin2('error in solver galerkin=*',erra,1)
+
       
        
 

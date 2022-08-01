@@ -60,8 +60,8 @@ c
       allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
-
-      nch = 10
+      nch0 = 20
+      nch = 4*nch0
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
@@ -80,37 +80,15 @@ c
       allocate(tsover(npts_over))
 
 
-
-      a = 0.0d0
-      b = 2*pi
-      dpars(1) = 1.0d0
-      ndd_curv = 1
-      ndz_curv = 0
-      ndi_curv = 0
-      call get_funcurv_geom_uni(a,b,nch,k,npts,srcinfo,
-     1  srccoefs,ts1,qwts,norders,iptype,ixys,circ_geom,
-     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
-      print *, "nch=",nch
-      print *, "kg=",kg
-      print *, "nptsg=",nptsg
-      call get_funcurv_geom_uni(a,b,nch,kg,nptsg,srcinfog,
-     1  srccoefsg,ts1g,qwtsg,nordersg,iptype,ixysg,circ_geom,
-     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
-      call prin2('a=*',a,1)
-      call prin2('b=*',b,1)
-
-      print *, "nch=",nch
-      print *, "nover=",nover
-      print *, "a=",a
-      print *, "b=",b
-      print *, "npts_over=",npts_over
-      call get_funcurv_geom_uni(a,b,nch,nover,npts_over,srcover,
-     1  srccoefsover,tsover,wover,novers,iptype,ixyso,circ_geom,
-     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+      call get_diamond(nch0,nch,k,npts,srcinfo,srccoefs,
+     1 qwts,norders,iptype,ixys)
+      call get_diamond(nch0,nch,kg,nptsg,srcinfog,srccoefsg,
+     1 qwtsg,nordersg,iptype,ixysg)
+      call get_diamond(nch0,nch,nover,npts_over,srcover,
+     1 srccoefsover,wover,novers,iptype,ixyso)
 
 
 
-      h = 2*pi/(nch+0.0d0)
       print *, "nptsg=",nptsg
       allocate(sigmag(nptsg),sigmacoefsg(nptsg),solncoefsg(nptsg))
       allocate(solng(nptsg))
@@ -137,7 +115,9 @@ c
       enddo
       ra = sum(wover)
       ra2 = sum(qwts)
-
+      print *, "ra=",ra
+      print *, "ra2=",ra2
+      print *, "diff=",abs(ra2-ra)
 
 c
 c  test near quad at second patch from first patch
