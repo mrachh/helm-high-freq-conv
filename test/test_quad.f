@@ -36,7 +36,8 @@
       done = 1.0d0
       pi = atan(done)*4
 
-      zk = 110.0d0 + 0.0d0*ima
+      zk = 100.0d0 + 0.0d0*ima
+      zk = 1.0d0
       zpars(1) = zk
       zpars(2) = -ima*zk
       zpars(3) = 1.0d0
@@ -78,7 +79,7 @@ c
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
 
-      nch = 200
+      nch = 2000
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
@@ -104,13 +105,23 @@ c
       ndd_curv = 1
       ndz_curv = 0
       ndi_curv = 0
+      call get_funcurv_geom_uni(a,b,nch,k,npts,srcinfo,
+     1  srccoefs,ts1,qwts,norders,iptype,ixys,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
       print *, "nch=",nch
       print *, "kg=",kg
       print *, "nptsg=",nptsg
       call get_funcurv_geom_uni(a,b,nch,kg,nptsg,srcinfog,
      1  srccoefsg,ts1g,qwtsg,nordersg,iptype,ixysg,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+      call prin2('a=*',a,1)
+      call prin2('b=*',b,1)
 
+      print *, "nch=",nch
+      print *, "nover=",nover
+      print *, "a=",a
+      print *, "b=",b
+      print *, "npts_over=",npts_over
       call get_funcurv_geom_uni(a,b,nch,nover,npts_over,srcover,
      1  srccoefsover,tsover,wover,novers,iptype,ixyso,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
@@ -126,53 +137,29 @@ c
       allocate(potexcoefs(npts))
 
       allocate(potex(npts),potexg(nptsg),potexcoefsg(nptsg))
+
+c
+c  get density info
+c
       do ich=1,nch
-        tstart = (ich-1.0d0)*h
-        tend = (ich+0.0d0)*h
-c
-c  get source info
-c
 
         do j=1,k
           ipt = (ich-1)*k + j
-          tuse = tstart + (tend-tstart)*(ts(j)+1)/2
-          srcinfo(1,ipt) = cos(tuse)
-          srcinfo(2,ipt) = sin(tuse)
-          srcinfo(3,ipt) = -sin(tuse)*h/2
-          srcinfo(4,ipt) = cos(tuse)*h/2
-          srcinfo(5,ipt) = -cos(tuse)*h*h/2/2
-          srcinfo(6,ipt) = -sin(tuse)*h*h/2/2
-          srcinfo(7,ipt) = cos(tuse)
-          srcinfo(8,ipt) = sin(tuse)
+          tuse = ts1(ipt)
           sigma(ipt) = exp(ima*(imode+0.0d0)*tuse)
           potex(ipt) = zfac*sigma(ipt)
-          qwts(ipt) = h/2*wts(j)
         enddo
         istart = (ich-1)*k+1
 
-        call dgemm('n','t',6,k,k,alpha,srcinfo(1,istart),
-     1    8,umat,k,beta,srccoefs(1,istart),6)
         call dgemm('n','t',2,k,k,alpha,sigma(istart),
      1     2,umat,k,beta,sigmacoefs(istart),2)
         call dgemm('n','t',2,k,k,alpha,potex(istart),
      1     2,umat,k,beta,potexcoefs(istart),2)
-c
-c  get density info
-c
         do j=1,kg
           ipt = (ich-1)*kg + j
-          tuse = tstart + (tend-tstart)*(tsg(j)+1)/2
-          srcinfog(1,ipt) = cos(tuse)
-          srcinfog(2,ipt) = sin(tuse)
-          srcinfog(3,ipt) = -sin(tuse)*h/2
-          srcinfog(4,ipt) = cos(tuse)*h/2
-          srcinfog(5,ipt) = -cos(tuse)*h*h/2/2
-          srcinfog(6,ipt) = -sin(tuse)*h*h/2/2
-          srcinfog(7,ipt) = cos(tuse)
-          srcinfog(8,ipt) = sin(tuse)
+          tuse = ts1g(ipt) 
           sigmag(ipt) = exp(ima*(imode+0.0d0)*tuse)
           potexg(ipt) = zfac*sigmag(ipt)
-          qwtsg(ipt) = h/2*wtsg(j)
         enddo
         istart = (ich-1)*kg + 1
         call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),
@@ -180,19 +167,7 @@ c
         call dgemm('n','t',2,kg,kg,alpha,potexg(istart),
      1     2,umatg,kg,beta,potexcoefsg(istart),2)
 
-c 
-c  get oversampled fun info
-c    
-        norders(ich) = k
-        iptype(ich) = 1
-        ixys(ich) = (ich-1)*k+1
-c        novers(ich) = nover
-c        ixyso(ich) = (ich-1)*nover + 1
-        ixysg(ich) = (ich-1)*kg+1
       enddo
-      ixys(nch+1) = npts+1
-c      ixyso(nch+1) = npts_over+1
-      ixysg(nch+1) = nptsg+1
       ra = sum(wover)
       ra2 = sum(qwts)
       call prin2('Error in perimeter of circle=*',abs(ra-2*pi),1)
@@ -200,14 +175,11 @@ c      ixyso(nch+1) = npts_over+1
       call prin2('sigma=*',sigma,32)
       call prin2('sigmacoefs=*',sigmacoefs,32)
 
-
       isrc = 5
       itarg = 3
 
-
       rdotns = -0.5d0
       rdotnt = 0.5d0
-
 
       ndd = 0
       ndi = 0
@@ -249,15 +221,17 @@ c
 
       print *, "starting trid quad"
       print *, "nch=",nch
+      call cpu_time(t1)
+C$       t1 = omp_get_wtime()      
       call get_helm_dir_trid_quad_corr(zk,nch,k,k,npts,npts,srcinfo,
      1   srcinfo,ndz,zpars,nnz,row_ptr,col_ind,nquad,wnear,wnearcoefs)
       
       call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,srcinfo,
      1   srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,wnearg,
      2   wnearcoefsg)
-c      call get_helm_dir_trid_quad_corr(zk,nch,kg,kg,nptsg,nptsg,
-c     1   srcinfog,srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,
-c     2   wnearg,wnearcoefsg)
+      call cpu_time(t2)
+C$       t2 = omp_get_wtime()     
+      call prin2('total quad gen time=*',t2-t1,1)
 
 
       allocate(iquad(nnz+1),iquadg(nnzg+1))
@@ -295,6 +269,7 @@ c      call prinf('ixys=*',ixys,nch+1)
      1  srcinfo,eps,ndz,zpars,nnz,row_ptr,col_ind,iquad,
      2  nquad,wnearcoefs,sigmacoefs,novers(1),npts_over,ixyso,
      3  srcover,wover,potcoefs)
+
       erra = 0
       ra = 0
       do i=1,npts
@@ -378,14 +353,16 @@ c
       allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
       
-
+C$OMP PARALLEL DO DEFAULT(SHARED)
       do i=1,nptsg+1
         row_ptr(i) = (i-1)*3+1
       enddo
+C$OMP END PARALLEL DO      
 cc      call prinf('row_ptr=*',row_ptr,nptsg+1)
 c
 c  set up row_ptr and col_ind for this case
 c
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,il,ir,j,ipt)
       do ich=1,nch
         il = ich-1
         ir = ich+1
@@ -398,6 +375,7 @@ c
           col_ind(row_ptr(ipt)+2) = ir
         enddo
       enddo
+C$OMP END PARALLEL DO      
       print *, "done computing row_ptr and col_ind"
 cc      call prinf('row_ptr=*',row_ptr,npts+1)
 cc      call prinf('col_ind=*',col_ind,nnz)
@@ -490,6 +468,13 @@ c
       rdotns = -0.5d0
       rdotnt = 0.5d0
       call legeinmt_allnodes(k,xint)
+
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,istart,il,ir)
+C$OMP$PRIVATE(rdlpcoefs,rspcoefs,inode,itarg,srcoverslf)
+C$OMP$PRIVATE(rdotns_all,rdotnt_all,ds,woverslf,fkernslf)
+C$OMP$PRIVATE(srcover,j,wover,itargl,itargr,l,fkern,icind,zints)
+C$OMP$PRIVATE(zints2)
       do ich=1,nch
         istart = (ich-1)*k+1
         il = ich-1
@@ -539,13 +524,9 @@ c
           itargl = (il-1)*kg + j 
           itargr = (ir-1)*kg + j
           do l=1,mquad
-            call h2d_comb_stab(srcover(1,l),8,srcinfog(1,itargl),
-     1          rdotns,rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j))
             call h2d_comb(srcover(1,l),8,srcinfog(1,itargl),
      1          ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j))
             fkern(l,j) = fkern(l,j)*wover(l)
-            call h2d_comb_stab(srcover(1,l),8,srcinfog(1,itargr),rdotns,
-     1         rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j+kg)) 
             call h2d_comb(srcover(1,l),8,srcinfog(1,itargr),
      1         ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j+kg)) 
             fkern(l,j+kg) = fkern(l,j+kg)*wover(l)
@@ -579,6 +560,7 @@ c
           enddo
         enddo
       enddo
+C$OMP END PARALLEL DO      
 
 
       return

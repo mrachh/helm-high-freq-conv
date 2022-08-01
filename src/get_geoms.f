@@ -19,8 +19,11 @@
       done = 1.0d0
       pi = atan(done)*4.0d0
       h = (b-a)/(nch+0.0d0)
+      alpha = 1.0d0
+      beta = 0.0d0
 
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
+      itype = 2
       call legeexps(itype,k,ts,umat,vmat,wts)
 
       do ich=1,nch
@@ -32,7 +35,7 @@ c
 
         do j=1,k
           ipt = (ich-1)*k + j
-          tuse = tstart + (tend-tstart)*(ts(j)+1)/2
+          tuse = (tstart+tend)/2 + (tend-tstart)*ts(j)/2
           ts1(ipt) = tuse
           call funcurv(tuse,ndd,dpars,ndz,zpars,ndi,ipars,
      1       srcinfo(1:8,ipt))
