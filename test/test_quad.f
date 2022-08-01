@@ -1,7 +1,8 @@
       implicit real *8 (a-h,o-z)
       real *8, allocatable :: srcinfo(:,:),qwts(:),srccoefs(:,:)
-      real *8, allocatable :: srcinfog(:,:),qwtsg(:)
-      real *8, allocatable :: srcover(:,:),wover(:)
+      real *8, allocatable :: srcinfog(:,:),qwtsg(:),srccoefsg(:,:)
+      real *8, allocatable :: srcover(:,:),wover(:),srccoefsover(:,:)
+      real *8, allocatable :: ts1(:),ts1g(:),tsover(:)
       real *8, allocatable :: ts(:),umat(:,:),vmat(:,:),wts(:)
       real *8, allocatable :: tsg(:),umatg(:,:),vmatg(:,:),wtsg(:)
       real *8, allocatable :: tover(:),wtsover(:)
@@ -15,15 +16,18 @@
       integer, allocatable :: ich_id(:)
       real *8, allocatable :: ts_pts(:)
       integer, allocatable :: norders(:),ixys(:),iptype(:),ixysg(:)
+      integer, allocatable :: nordersg(:)
       integer, allocatable :: novers(:),ixyso(:)
       complex *16 zk,zpars(3),ima,z1,z2
       complex *16, allocatable :: sigmacoefsg(:),potcoefsg(:)
       complex *16, allocatable :: sigmacoefs(:),potcoefs(:)
       complex *16, allocatable :: potexcoefsg(:),potexcoefs(:)
       complex *16 fjvals(0:100),fhvals(0:100),fjders(0:100)
+      real *8 dpars(1)
       complex *16 fhders(0:100),zfac
       real *8 xy_in(2),xy_out(2)
       data ima/(0.0d0,1.0d0)/
+      external circ_geom
 
       
 
@@ -32,7 +36,7 @@
       done = 1.0d0
       pi = atan(done)*4
 
-      zk = 1.1d0 + 0.0d0*ima
+      zk = 110.0d0 + 0.0d0*ima
       zpars(1) = zk
       zpars(2) = -ima*zk
       zpars(3) = 1.0d0
@@ -45,10 +49,10 @@
       call jbessel2d(nterms,zk,rscale,fjvals,ifder,fjders)
       call h2dall(nterms,zk,rscale,fhvals,ifder,fhders)
 
-      call prin2('fjvals=*',fjvals,2*(imode+1))
-      call prin2('fjders=*',fjders,2*(imode+1))
-      call prin2('fhvals=*',fhvals,2*(imode+1))
-      call prin2('fhders=*',fhders,2*(imode+1))
+c      call prin2('fjvals=*',fjvals,2*(imode+1))
+c      call prin2('fjders=*',fjders,2*(imode+1))
+c      call prin2('fhvals=*',fhvals,2*(imode+1))
+c      call prin2('fhders=*',fhders,2*(imode+1))
 
       zfac = pi/2*ima*zk*fjders(imode)*fhvals(imode)*zpars(3)
       zfac = zfac + pi/2*ima*fjvals(imode)*fhvals(imode)*zpars(2)
@@ -63,8 +67,8 @@ c
 c  nover is the oversampled source order
 c
 
-      k = 20
-      kg = 12
+      k = 22
+      kg = 16
       nover = 24
       itype = 2
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
@@ -73,23 +77,47 @@ c
       allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
-      allocate(tover(nover),wtsover(nover))
-      itype = 1
-      call legeexps(itype,nover,tover,umo,vmo,wtsover)
 
-
-      nch = 12
-      allocate(srcinfo(8,k*nch),qwts(k*nch),qwtsg(kg*nch))
-      allocate(srcinfog(8,kg*nch))
-      allocate(srccoefs(6,k*nch))
-      allocate(srcover(8,nover*nch),wover(nover*nch))
-      allocate(norders(nch),iptype(nch),ixys(nch+1))
-      allocate(novers(nch),ixyso(nch+1),ixysg(nch+1))
-      h = 2*pi/(nch+0.0d0)
+      nch = 200
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
+      allocate(srcinfo(8,npts),qwts(npts))
+      allocate(srccoefs(6,npts),ts1(npts))
+      allocate(norders(nch),iptype(nch),ixys(nch+1))
 
+
+      allocate(srcinfog(8,nptsg),srccoefsg(6,nptsg))
+      allocate(qwtsg(nptsg))
+      allocate(nordersg(nch),ixysg(nch+1),ts1g(nptsg))
+
+      allocate(srccoefsover(6,npts_over))
+      allocate(srcover(8,npts_over),wover(npts_over))
+      allocate(novers(nch),ixyso(nch+1))
+      allocate(tsover(npts_over))
+
+
+
+      a = 0.0d0
+      b = 2*pi
+      dpars(1) = 1.0d0
+      ndd_curv = 1
+      ndz_curv = 0
+      ndi_curv = 0
+      print *, "nch=",nch
+      print *, "kg=",kg
+      print *, "nptsg=",nptsg
+      call get_funcurv_geom_uni(a,b,nch,kg,nptsg,srcinfog,
+     1  srccoefsg,ts1g,qwtsg,nordersg,iptype,ixysg,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+
+      call get_funcurv_geom_uni(a,b,nch,nover,npts_over,srcover,
+     1  srccoefsover,tsover,wover,novers,iptype,ixyso,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+
+
+
+      h = 2*pi/(nch+0.0d0)
       print *, "nptsg=",nptsg
       allocate(sigma(npts),sigmacoefsg(nptsg),pot(npts))
       allocate(sigmag(nptsg))
@@ -155,28 +183,15 @@ c
 c 
 c  get oversampled fun info
 c    
-        do j=1,nover
-          ipt = (ich-1)*nover + j
-          tuse = tstart + (tend-tstart)*(tover(j)+1)/2
-          srcover(1,ipt) = cos(tuse)
-          srcover(2,ipt) = sin(tuse)
-          srcover(3,ipt) = -sin(tuse)*h/2
-          srcover(4,ipt) = cos(tuse)*h/2
-          srcover(5,ipt) = -cos(tuse)*h*h/2/2
-          srcover(6,ipt) = -sin(tuse)*h*h/2/2
-          srcover(7,ipt) = cos(tuse)
-          srcover(8,ipt) = sin(tuse)
-          wover(ipt) = h/2*wtsover(j)
-        enddo
         norders(ich) = k
         iptype(ich) = 1
         ixys(ich) = (ich-1)*k+1
-        novers(ich) = nover
-        ixyso(ich) = (ich-1)*nover + 1
+c        novers(ich) = nover
+c        ixyso(ich) = (ich-1)*nover + 1
         ixysg(ich) = (ich-1)*kg+1
       enddo
       ixys(nch+1) = npts+1
-      ixyso(nch+1) = npts_over+1
+c      ixyso(nch+1) = npts_over+1
       ixysg(nch+1) = nptsg+1
       ra = sum(wover)
       ra2 = sum(qwts)
@@ -252,11 +267,10 @@ c     2   wnearg,wnearcoefsg)
 c      call prinf('ixys=*',ixys,nch+1)
       call get_iquad_rsc2d(nch,ixys,npts,nnz,row_ptr,col_ind,iquad)
 
-      call prinf('ixysg=*',ixysg,nch+1)
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
       iquadtype = 1
-      eps = 0.51d-11
+      eps = 0.51d-13
 
       call prin2('zpars=*',zpars,6)
       call lpcomp_helm_comb_dir_addsub_2d(nch,norders,ixys,
@@ -293,11 +307,8 @@ c      call prinf('ixys=*',ixys,nch+1)
       call prin2('error in pot galerkin=*',erra,1)
 
       potcoefsg = 0
-      call prinf('ixysg=*',ixysg,nch+1)
       call prinf('nptsg=*',nptsg,1)
-      call prin2('srcinfog=*',srcinfog,24)
       call prinf('nnzg=*',nnzg,1)
-      call prinf('row_ptrg=*',row_ptrg,nptsg+1)
       call lpcomp_galerkin_helm2d(nch,kg,ixysg,nptsg,
      1  srcinfog,eps,ndz,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,sigmacoefsg,novers(1),npts_over,ixyso,
@@ -311,8 +322,8 @@ c      call prinf('ixys=*',ixys,nch+1)
      1      real(potcoefsg(i))/real(potexcoefsg(i))
         ra = ra + abs(potexcoefsg(i))**2
       enddo
-      call prin2('potexcoefs=*',potexcoefs,42)
-      call prin2('potexcoefsg=*',potexcoefsg,34)
+c      call prin2('potexcoefs=*',potexcoefs,42)
+c      call prin2('potexcoefsg=*',potexcoefsg,34)
 
       erra = sqrt(erra/ra)
       call prin2('error in pot galerkin=*',erra,1)
@@ -347,6 +358,9 @@ c      call prinf('ixys=*',ixys,nch+1)
       complex *16, allocatable :: zints(:,:),zints2(:,:)
       complex *16, allocatable :: zpmat(:,:), zpslfmat(:,:,:)
       complex *16, allocatable :: fkern(:,:), fkernslf(:)
+      real *8, allocatable :: xint(:,:,:),rdlpcoefs(:,:),rspcoefs(:,:)
+      real *8, allocatable :: rdotns_all(:),rdotnt_all(:)
+
       complex *16 zpars(3),ima,zalpha,zbeta
       data ima/(0.0d0,1.0d0)/
 c
@@ -368,7 +382,7 @@ c
       do i=1,nptsg+1
         row_ptr(i) = (i-1)*3+1
       enddo
-      call prinf('row_ptr=*',row_ptr,nptsg+1)
+cc      call prinf('row_ptr=*',row_ptr,nptsg+1)
 c
 c  set up row_ptr and col_ind for this case
 c
@@ -436,9 +450,8 @@ c  Compute off diagonal interpolation matrices
 c
       m = 20
       iref = min(3,ceiling(2*log(k+0.0d0)/log(2.0d0)))
-      iref = 4
       print *, "iref=",iref
-      nmid = 5
+      nmid = 3
       nchquadadj = 2*(iref+1) + nmid
       
       mquad = m*nchquadadj
@@ -472,8 +485,11 @@ c
       allocate(fkern(mquad,2*kg))
       allocate(fkernslf(2*nslf0))
       allocate(srcoverslf(8,2*nslf0),woverslf(2*nslf0))
+      allocate(xint(k,k,k),rdlpcoefs(k,k),rspcoefs(k,k))
+      allocate(rdotns_all(2*nslf0),rdotnt_all(2*nslf0))
       rdotns = -0.5d0
       rdotnt = 0.5d0
+      call legeinmt_allnodes(k,xint)
       do ich=1,nch
         istart = (ich-1)*k+1
         il = ich-1
@@ -481,18 +497,27 @@ c
         if(il.le.0) il = nch
         if(ir.gt.nch) ir = 1
 
+        call chunk_to_ldlp_sp_xint(k,ts,srcinfo(1,istart),umat,xint,
+     1     rdlpcoefs,rspcoefs)
+        
+
 c  start self quadrature now
         do inode=1,kg
           itarg = (ich-1)*kg + inode
           call dgemm('n','n',6,2*nslf0,k,alpha,srcinfo(1,istart),8,
      1       xslfmat(1,1,inode),k,beta,srcoverslf,8)
+          call  dgemv('t',k,2*nslf0,alpha,pslfmat(1,1,inode),k,
+     1       rdlpcoefs(1,inode),1,beta,rdotns_all,1)
+          call  dgemv('t',k,2*nslf0,alpha,pslfmat(1,1,inode),k,
+     1       rspcoefs(1,inode),1,beta,rdotnt_all,1)
           do j=1,2*nslf0
             ds = sqrt(srcoverslf(3,j)**2 + srcoverslf(4,j)**2)
             srcoverslf(7,j) = srcoverslf(4,j)/ds
             srcoverslf(8,j) = -srcoverslf(3,j)/ds
             woverslf(j) = ds*wslf(j,inode)
             call h2d_comb_stab(srcoverslf(1,j),8,srcinfog(1,itarg),
-     1         rdotns,rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkernslf(j)) 
+     1         rdotns_all(j),rdotnt_all(j),ndd,dpars,ndz,zpars,
+     2         ndi,ipars,fkernslf(j)) 
             fkernslf(j) = fkernslf(j)*woverslf(j)
           enddo
           call zgemv('n',kg,2*nslf0,zalpha,zpslfmat(1,1,inode),k,
@@ -514,11 +539,15 @@ c
           itargl = (il-1)*kg + j 
           itargr = (ir-1)*kg + j
           do l=1,mquad
-            call h2d_comb_stab(srcover(1,l),8,srcinfog(1,itargl),rdotns,
-     1         rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j))
+            call h2d_comb_stab(srcover(1,l),8,srcinfog(1,itargl),
+     1          rdotns,rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j))
+            call h2d_comb(srcover(1,l),8,srcinfog(1,itargl),
+     1          ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j))
             fkern(l,j) = fkern(l,j)*wover(l)
             call h2d_comb_stab(srcover(1,l),8,srcinfog(1,itargr),rdotns,
      1         rdotnt,ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j+kg)) 
+            call h2d_comb(srcover(1,l),8,srcinfog(1,itargr),
+     1         ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j+kg)) 
             fkern(l,j+kg) = fkern(l,j+kg)*wover(l)
           enddo
         enddo
