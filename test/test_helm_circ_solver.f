@@ -22,8 +22,11 @@
       complex *16, allocatable :: sigmacoefsg(:),potcoefsg(:)
       complex *16, allocatable :: sigmacoefs(:),potcoefs(:)
       complex *16, allocatable :: potexcoefsg(:),potexcoefs(:)
+      complex *16, allocatable :: solncoefsg(:),solnexcoefsg(:),
+     1   solnexg(:)
       complex *16 fjvals(0:100),fhvals(0:100),fjders(0:100)
       real *8 dpars(1)
+      real *8, allocatable :: errs(:)
       complex *16 fhders(0:100),zfac
       real *8 xy_in(2),xy_out(2)
       data ima/(0.0d0,1.0d0)/
@@ -76,7 +79,7 @@ c
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
 
-      nch = 5
+      nch = 10
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
@@ -129,7 +132,8 @@ c
       print *, "nptsg=",nptsg
       allocate(sigma(npts),sigmacoefsg(nptsg),pot(npts))
       allocate(sigmag(nptsg))
-      allocate(potcoefsg(nptsg))
+      allocate(potcoefsg(nptsg),solncoefsg(nptsg),solnexcoefsg(nptsg))
+      allocate(solnexg(nptsg))
       allocate(sigmacoefs(npts),potcoefs(npts))
       allocate(potexcoefs(npts))
 
@@ -157,13 +161,15 @@ c
           tuse = ts1g(ipt) 
           sigmag(ipt) = exp(ima*(imode+0.0d0)*tuse)
           potexg(ipt) = zfac*sigmag(ipt)
+          solnexg(ipt) = sigmag(ipt)/zfac
         enddo
         istart = (ich-1)*kg + 1
         call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),
      1     2,umatg,kg,beta,sigmacoefsg(istart),2)
         call dgemm('n','t',2,kg,kg,alpha,potexg(istart),
      1     2,umatg,kg,beta,potexcoefsg(istart),2)
-
+        call dgemm('n','t',2,kg,kg,alpha,solnexg(istart),
+     1     2,umatg,kg,beta,solnexcoefsg(istart),2)
       enddo
       ra = sum(wover)
       ra2 = sum(qwts)
@@ -177,12 +183,9 @@ c
 c  test near quad at second patch from first patch
 c
 c
-      nnz = 3*k*nch
 
       nnzg = 3*kg*nch
-      nquadg = nnz*kg
-      allocate(row_ptr(npts+1),col_ind(nnz),wnear(nquad))
-      allocate(wnearcoefs(nquad))
+      nquadg = nnzg*kg
 
       allocate(row_ptrg(nptsg+1),col_indg(nnzg),wnearg(nquadg))
       allocate(wnearcoefsg(nquadg))
@@ -205,7 +208,6 @@ C$       t1 = omp_get_wtime()
 C$       t2 = omp_get_wtime()     
       call prin2('total quad gen time=*',t2-t1,1)
       call prinf('nnzg=*',nnzg,1)
-      call prinf('row_ptrg=*',row_ptrg,nptsg+1)
 
 
       allocate(iquadg(nnzg+1))
@@ -217,7 +219,7 @@ C$       t2 = omp_get_wtime()
       potcoefsg = 0
       print *, "novers=",novers(1)
       call lpcomp_galerkin_helm2d(nch,kg,ixysg,nptsg,
-     1  srcinfog,eps,ndz,zpars,nnzg,row_ptrg,col_indg,iquadg,
+     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,sigmacoefsg,novers(1),npts_over,ixyso,
      3  srcover,wover,potcoefsg)
       erra = 0
@@ -233,6 +235,29 @@ C$       t2 = omp_get_wtime()
       erra = sqrt(erra/ra)
       call prin2('error in pot galerkin=*',erra,1)
 
+      
+      niter = 0
+      numit = max(ceiling(10*abs(zk)),200)
+      allocate(errs(numit+1))
+      ifinout = 1
+      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
+     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
+     2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
+     3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
+     4  solncoefsg)
+      erra = 0
+      ra = 0
+      do i=1,nptsg
+        erra = erra + abs(solncoefsg(i)-solnexcoefsg(i))**2
+        if(i.le.5) print *, real(solncoefsg(i)),real(solnexcoefsg(i)),
+     1      real(solncoefsg(i))/real(solnexcoefsg(i))
+        ra = ra + abs(solnexcoefsg(i))**2
+      enddo
+
+      erra = sqrt(erra/ra)
+      call prin2('error in solver galerkin=*',erra,1)
+
+      
        
 
       return

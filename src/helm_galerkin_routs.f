@@ -44,7 +44,6 @@ C$OMP PARALLEL DO DEFAULT(SHARED)
         row_ptr(i) = (i-1)*3+1
       enddo
 C$OMP END PARALLEL DO      
-      call prinf('row_ptr=*',row_ptr,nptsg+1)
 c
 c  set up row_ptr and col_ind for this case
 c
@@ -305,7 +304,7 @@ c
 c
 c
       subroutine lpcomp_galerkin_helm2d(nch,k,ixys,npts,
-     1  srcvals,eps,ndz,zpars,nnz,row_ptr,
+     1  srcvals,eps,zpars,nnz,row_ptr,
      2  col_ind,iquad,nquad,wnearcoefs,sigmacoefs,nover,
      3  nptso,ixyso,srcover,whtsover,potcoefs)
 c
@@ -314,9 +313,9 @@ c  layer potential in the Galerkin formulation
 c
 c
       implicit real *8 (a-h,o-z)
-      integer nch,k,ixys(nch+1),npts,ndz
+      integer nch,k,ixys(nch+1),npts
       real *8 srcvals(8,npts),eps
-      complex *16 zpars(ndz)
+      complex *16 zpars(3)
       integer nnz,row_ptr(npts+1),col_ind(nnz),iquad(nnz+1)
       integer nquad
       complex *16 wnearcoefs(nquad),sigmacoefs(npts)
@@ -380,12 +379,10 @@ c
       pi = atan(done)*4
 
       itype = 2
-      call prinf('k=*',k,1)
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
       call legeexps(itype,k,ts,umat,vmat,wts)
 
       itype = 1
-      print *, "nover=",nover
       
       allocate(tso(nover),wso(nover),pot(npts))
       call legeexps(itype,nover,tso,umato,vmato,wso)
@@ -406,8 +403,6 @@ c
       allocate(sources(2,ns),targvals(2,ntarg))
       allocate(charges(ns),dipstr(ns),dipvec(2,ns))
       allocate(sigmaover(ns))
-      print *, "ns=",ns
-      print *, "ntarg=",ntarg
 
 c 
 c   evaluate density at oversampled nodes: assumes all
@@ -560,3 +555,309 @@ cc      call prin2('time in lpcomp=*',ttot,1)
       
       return
       end
+c
+c
+c
+c
+c
+c
+      subroutine helm_comb_dir_galerkin_solver2d(nch,k,ixys,
+     1    npts,srcvals,eps,zpars,nnz,row_ptr,col_ind,iquad,
+     2    nquad,wnearcoefs,nover,npts_over,ixyso,srcover,wover,
+     2    numit,ifinout,rhscoefs,eps_gmres,niter,errs,rres,solncoefs)
+c
+c  Solve the Helmholtz boundary value problem using the combined 
+c  field integral equation
+c
+c  .. math ::
+c  
+c      u = (\alpha \mathcal{S}_{k} + \beta \mathcal{D}_{k})
+c
+c  Same ordered chunks, and same order oversampling
+c
+c  Input arguments:
+c    - nch: integer
+c        number of chunks
+c    - k: integer
+c        order of discretization
+c    - ixys: integer(nch+1)
+c        starting location of data on patch i
+c    - npts: integer
+c        total number of discretization points on the boundary
+c    - srcvals: real *8 (8,npts)
+c        x,y,dxdt,dydt,dxdt2,dydt2,rnx,rny at the discretization nodes
+c    - eps: real *8
+c        precision requested
+c    - zpars: complex *16 (3)
+c        kernel parameters (Referring to formula (1))
+c        zpars(1) = k 
+c        zpars(2) = alpha
+c        zpars(3) = beta
+c    - nnz: integer
+c        number of non-zero entries in quadrature correction array
+c    - row_ptr: integer(npts+1)
+c        row_ptr(i) is the pointer to col_ind array where list of 
+c        relevant source patches for target i start
+c    - col_ind: integer (nnz)
+c        list of source patches relevant for all targets, sorted
+c        by the target number
+c    - iquad: integer(nnz+1)
+c        location in wnear array where quadrature for col_ind(i)
+c        starts
+c    - nquad: integer
+c        number of entries in wnear
+c    - wnearcoefs: complex *16 (nquad)
+c        quadrature corrections in coefficient land
+c    - nover: integer
+c        oversampling parameter
+c    - npts_over: integer
+c        total number of oversampled points
+c    - ixyso: integer(nch+1)
+c        starting location for oversampled data
+c    - srcover: real *8 (8,npts_over)
+c        total number of oversampled points
+c    - wover: real *8(npts_over)
+c        oversampled smooth quadrature weights
+c        
+c    - numit: integer
+c        max number of gmres iterations
+c    - ifinout: integer
+c        flag for interior or exterior problems (normals assumed to 
+c        be pointing in exterior of region)
+c        * ifinout = 0, interior problem
+c        * ifinout = 1, exterior problem
+c    - rhscoefs: complex *16(npts)
+c        right hand side
+c    - eps_gmres: real *8
+c        gmres tolerance requested
+c 
+c  Output arguments:
+c    - niter: integer
+c        number of gmres iterations required for relative residual
+c    - errs: real *8 (1:niter)
+c        relative residual as a function of iteration number
+c    - rres: real *8
+c        relative residual for computed solution
+c    - solncoefs: complex *16(npts)
+c        density which solves the dirichlet problem
+c-----------------------------------
+c
+      implicit none
+      integer nch,k,npts,ixys(nch+1)
+      real *8 srcvals(8,npts),eps,eps_gmres
+      complex *16 zpars(3)
+      complex *16 rhscoefs(npts)
+      complex *16 solncoefs(npts)
+      integer nnz,row_ptr(npts+1),col_ind(nnz),iquad(nnz+1)
+      integer nquad
+      complex *16 wnearcoefs(nquad)
+      integer nover,npts_over,ixyso(nch+1)
+      real *8 srcover(8,npts_over),wover(npts_over)
+      integer numit,ifinout
+
+
+      real *8 errs(numit+1)
+      real *8 rres,eps2
+      integer niter
+
+
+      integer i,j,jpatch,jquadstart,jstart
+
+      integer ipars
+      real *8 dpars,timeinfo(10),t1,t2,omp_get_wtime
+      real *8 ttot,done,pi
+
+c
+c
+c       gmres variables
+c
+      complex *16 zid,ztmp
+      real *8 rb,wnrm2
+      integer it,iind,it1,l
+      real *8 rmyerr
+      complex *16 temp
+      complex *16, allocatable :: vmat(:,:),hmat(:,:)
+      complex *16, allocatable :: cs(:),sn(:)
+      complex *16, allocatable :: svec(:),yvec(:),wtmp(:)
+
+
+      allocate(vmat(npts,numit+1),hmat(numit,numit))
+      allocate(cs(numit),sn(numit))
+      allocate(wtmp(npts),svec(numit+1),yvec(numit+1))
+
+
+      done = 1
+      pi = atan(done)*4
+
+c
+c
+c     start gmres code here
+c
+c     NOTE: matrix equation should be of the form (z*I + K)x = y
+c       the identity scaling (z) is defined via zid below,
+c       and K represents the action of the principal value 
+c       part of the matvec
+c
+      zid = -(-1)**(ifinout)*zpars(3)/2
+
+
+      niter=0
+
+c
+c      compute norm of right hand side and initialize v
+c 
+      rb = 0
+
+      do i=1,numit
+        cs(i) = 0
+        sn(i) = 0
+      enddo
+
+
+c
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:rb)
+      do i=1,npts
+        rb = rb + abs(rhscoefs(i))**2
+      enddo
+C$OMP END PARALLEL DO      
+      rb = sqrt(rb)
+
+C$OMP PARALLEL DO DEFAULT(SHARED)
+      do i=1,npts
+        vmat(i,1) = rhscoefs(i)/rb
+      enddo
+C$OMP END PARALLEL DO      
+
+      svec(1) = rb
+
+      do it=1,numit
+        it1 = it + 1
+
+c
+c        NOTE:
+c        replace this routine by appropriate layer potential
+c        evaluation routine  
+c
+
+
+        call lpcomp_galerkin_helm2d(nch,k,ixys,npts,
+     1    srcvals,eps,zpars,nnz,row_ptr,col_ind,iquad,
+     2    nquad,wnearcoefs,vmat(1,it),nover,npts_over,ixyso,
+     3    srcover,wover,wtmp)
+
+        do l=1,it
+          ztmp = 0
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:ztmp)          
+          do j=1,npts
+            ztmp = ztmp + wtmp(j)*conjg(vmat(j,l))
+          enddo
+C$OMP END PARALLEL DO          
+          hmat(l,it) = ztmp
+
+C$OMP PARALLEL DO DEFAULT(SHARED) 
+          do j=1,npts
+            wtmp(j) = wtmp(j)-hmat(l,it)*vmat(j,l)
+          enddo
+C$OMP END PARALLEL DO          
+        enddo
+          
+        hmat(it,it) = hmat(it,it)+zid
+        wnrm2 = 0
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:wnrm2)        
+        do j=1,npts
+          wnrm2 = wnrm2 + abs(wtmp(j))**2
+        enddo
+C$OMP END PARALLEL DO        
+        wnrm2 = sqrt(wnrm2)
+
+C$OMP PARALLEL DO DEFAULT(SHARED) 
+        do j=1,npts
+          vmat(j,it1) = wtmp(j)/wnrm2
+        enddo
+C$OMP END PARALLEL DO        
+
+        do l=1,it-1
+          temp = cs(l)*hmat(l,it)+conjg(sn(l))*hmat(l+1,it)
+          hmat(l+1,it) = -sn(l)*hmat(l,it)+cs(l)*hmat(l+1,it)
+          hmat(l,it) = temp
+        enddo
+
+        ztmp = wnrm2
+
+        call zrotmat_gmres2d(hmat(it,it),ztmp,cs(it),sn(it))
+          
+        hmat(it,it) = cs(it)*hmat(it,it)+conjg(sn(it))*wnrm2
+        svec(it1) = -sn(it)*svec(it)
+        svec(it) = cs(it)*svec(it)
+        rmyerr = abs(svec(it1))/rb
+        errs(it) = rmyerr
+        print *, "iter=",it,errs(it)
+
+        if(rmyerr.le.eps_gmres.or.it.eq.numit) then
+
+c
+c            solve the linear system corresponding to
+c            upper triangular part of hmat to obtain yvec
+c
+c            y = triu(H(1:it,1:it))\s(1:it);
+c
+          do j=1,it
+            iind = it-j+1
+            yvec(iind) = svec(iind)
+            do l=iind+1,it
+              yvec(iind) = yvec(iind) - hmat(iind,l)*yvec(l)
+            enddo
+            yvec(iind) = yvec(iind)/hmat(iind,iind)
+          enddo
+
+
+
+c
+c          estimate x
+c
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j)
+          do j=1,npts
+            solncoefs(j) = 0
+            do i=1,it
+              solncoefs(j) = solncoefs(j) + yvec(i)*vmat(j,i)
+            enddo
+          enddo
+C$OMP END PARALLEL DO          
+
+
+          rres = 0
+C$OMP PARALLEL DO DEFAULT(SHARED)          
+          do i=1,npts
+            wtmp(i) = 0
+          enddo
+C$OMP END PARALLEL DO          
+c
+c        NOTE:
+c        replace this routine by appropriate layer potential
+c        evaluation routine  
+c
+
+        call lpcomp_galerkin_helm2d(nch,k,ixys,npts,
+     1    srcvals,eps,zpars,nnz,row_ptr,col_ind,iquad,
+     2    nquad,wnearcoefs,solncoefs,nover,npts_over,ixyso,
+     3    srcover,wover,wtmp)
+
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:rres)            
+          do i=1,npts
+            rres = rres + abs(zid*solncoefs(i) + wtmp(i)-rhscoefs(i))**2
+          enddo
+C$OMP END PARALLEL DO          
+          rres = sqrt(rres)/rb
+          niter = it
+          return
+        endif
+      enddo
+c
+      return
+      end
+c
+c
+c
+c
+c
+c        
