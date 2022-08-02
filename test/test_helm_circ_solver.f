@@ -19,7 +19,7 @@
       complex *16 zk,zpars(3),ima,z1,z2,ztmp
       complex *16 pottarg,pottargex
       real *8 xyin(2),xyout(2)
-      real *8 dpars(1)
+      real *8 dpars(2)
       real *8, allocatable :: errs(:)
       complex *16 zfac
       real *8 xy_in(2),xy_out(2)
@@ -61,7 +61,7 @@ c
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
 
-      nch = 10
+      nch = 20
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
@@ -84,7 +84,8 @@ c
       a = 0.0d0
       b = 2*pi
       dpars(1) = 1.0d0
-      ndd_curv = 1
+      dpars(2) = 1.2d0
+      ndd_curv = 2
       ndz_curv = 0
       ndi_curv = 0
       call get_funcurv_geom_uni(a,b,nch,k,npts,srcinfo,
@@ -137,6 +138,7 @@ c
       enddo
       ra = sum(wover)
       ra2 = sum(qwts)
+      ra3 = sum(qwtsg)
 
 
 c

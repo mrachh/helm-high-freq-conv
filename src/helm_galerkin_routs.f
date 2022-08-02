@@ -147,27 +147,26 @@ c
       allocate(fkern(mquad,2*kg))
       allocate(fkernslf(2*nslf0))
       allocate(srcoverslf(8,2*nslf0),woverslf(2*nslf0))
-      allocate(xint(k,k,k),rdlpcoefs(k,k),rspcoefs(k,k))
+      allocate(xint(k,k,kg),rdlpcoefs(k,kg),rspcoefs(k,kg))
       allocate(rdotns_all(2*nslf0),rdotnt_all(2*nslf0))
-      rdotns = -0.5d0
-      rdotnt = 0.5d0
-      call legeinmt_allnodes(k,xint)
+      call legeinmt_allnodes(k,kg,xint)
 
 
-C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,istart,il,ir)
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,istart,istartg,il,ir)
 C$OMP$PRIVATE(rdlpcoefs,rspcoefs,inode,itarg,srcoverslf)
 C$OMP$PRIVATE(rdotns_all,rdotnt_all,ds,woverslf,fkernslf)
 C$OMP$PRIVATE(srcover,j,wover,itargl,itargr,l,fkern,icind,zints)
 C$OMP$PRIVATE(zints2)
       do ich=1,nch
         istart = (ich-1)*k+1
+        istartg = (ich-1)*kg+1
         il = ich-1
         ir = ich+1
         if(il.le.0) il = nch
         if(ir.gt.nch) ir = 1
 
-        call chunk_to_ldlp_sp_xint(k,ts,srcinfo(1,istart),umat,xint,
-     1     rdlpcoefs,rspcoefs)
+        call chunk_to_ldlp_sp_xint(k,kg,ts,tsg,srcinfo(1,istart),
+     1     srcinfog(1,istartg),umat,xint,rdlpcoefs,rspcoefs)
         
 
 c  start self quadrature now
@@ -175,18 +174,22 @@ c  start self quadrature now
           itarg = (ich-1)*kg + inode
           call dgemm('n','n',6,2*nslf0,k,alpha,srcinfo(1,istart),8,
      1       xslfmat(1,1,inode),k,beta,srcoverslf,8)
-          call  dgemv('t',k,2*nslf0,alpha,pslfmat(1,1,inode),k,
+          call dgemv('t',k,2*nslf0,alpha,pslfmat(1,1,inode),k,
      1       rdlpcoefs(1,inode),1,beta,rdotns_all,1)
-          call  dgemv('t',k,2*nslf0,alpha,pslfmat(1,1,inode),k,
+          call dgemv('t',k,2*nslf0,alpha,pslfmat(1,1,inode),k,
      1       rspcoefs(1,inode),1,beta,rdotnt_all,1)
           do j=1,2*nslf0
             ds = sqrt(srcoverslf(3,j)**2 + srcoverslf(4,j)**2)
             srcoverslf(7,j) = srcoverslf(4,j)/ds
             srcoverslf(8,j) = -srcoverslf(3,j)/ds
             woverslf(j) = ds*wslf(j,inode)
+
             call h2d_comb_stab(srcoverslf(1,j),8,srcinfog(1,itarg),
      1         rdotns_all(j),rdotnt_all(j),ndd,dpars,ndz,zpars,
-     2         ndi,ipars,fkernslf(j)) 
+     2         ndi,ipars,fkernslf(j))
+c            call h2d_comb(srcoverslf(1,j),8,srcinfog(1,itarg),
+c     1         ndd,dpars,ndz,zpars,
+c     2         ndi,ipars,fkernslf(j)) 
             fkernslf(j) = fkernslf(j)*woverslf(j)
           enddo
           call zgemv('n',kg,2*nslf0,zalpha,zpslfmat(1,1,inode),k,

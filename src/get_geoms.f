@@ -44,7 +44,8 @@ c
           srcinfo(4,ipt) = srcinfo(4,ipt)*h/2
           srcinfo(5,ipt) = srcinfo(5,ipt)*h*h/2/2
           srcinfo(6,ipt) = srcinfo(6,ipt)*h*h/2/2
-          qwts(ipt) = h/2*wts(j)
+          ds = sqrt(srcinfo(3,ipt)**2 + srcinfo(4,ipt)**2)
+          qwts(ipt) = wts(j)*ds
         enddo
         istart = (ich-1)*k+1
 
@@ -80,7 +81,7 @@ c
       enddo
       ndd = 3
       ndi = 1
-      dpars(1) = 0.1d0
+      dpars(1) = 0.05d0
       dpars(2) = -1.0d0
       dpars(3) = 0.0d0
       a = -1.0d0
@@ -113,17 +114,19 @@ c
       integer ipars(ndi)
       complex *16 zpars(ndz)
       
-      r = dpars(1)
+      a = dpars(1)
+      b = dpars(2)
       ct = cos(t)
       st = sin(t)
-      srcinfo(1) = r*ct
-      srcinfo(2) = r*st
-      srcinfo(3) = -r*st
-      srcinfo(4) = r*ct
-      srcinfo(5) = -r*ct
-      srcinfo(6) = -r*st
-      srcinfo(7) = ct
-      srcinfo(8) = st
+      srcinfo(1) = a*ct
+      srcinfo(2) = b*st
+      srcinfo(3) = -a*st
+      srcinfo(4) = b*ct
+      srcinfo(5) = -a*ct
+      srcinfo(6) = -b*st
+      ds = sqrt(srcinfo(3)**2 + srcinfo(4)**2)
+      srcinfo(7) = srcinfo(4)/ds
+      srcinfo(8) = -srcinfo(3)/ds
 
       return
       end

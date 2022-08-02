@@ -60,7 +60,7 @@ c
       allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
-      nch0 = 20
+      nch0 = 12
       nch = 4*nch0
       npts = nch*k
       npts_over = nch*nover
@@ -86,6 +86,15 @@ c
      1 qwtsg,nordersg,iptype,ixysg)
       call get_diamond(nch0,nch,nover,npts_over,srcover,
      1 srccoefsover,wover,novers,iptype,ixyso)
+      call prinf('nch0=*',nch0,1)
+      call prinf('nptsg=*',nptsg,1)
+      call prin2('srcinfog=*',srcinfog(3:8,1:nptsg),6*nptsg)
+      call prin2('srccoefsg=*',srccoefsg,6*nptsg)
+      call prin2('qwtsg=*',qwtsg,nptsg)
+      call prinf('nordersg=*',nordersg,nch)
+      call prinf('iptype=*',iptype,nch)
+      call prinf('ixysg=*',ixysg,nch+1)
+
 
 
 
@@ -149,7 +158,6 @@ C$       t2 = omp_get_wtime()
       call prin2('total quad gen time=*',t2-t1,1)
       call prinf('nnzg=*',nnzg,1)
 
-
       allocate(iquadg(nnzg+1))
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
@@ -171,6 +179,7 @@ C$       t2 = omp_get_wtime()
         istart = (i-1)*kg+1
         call dgemm('n','t',2,kg,kg,alpha,solncoefsg(istart),
      1     2,vmatg,kg,beta,solng(istart),2)
+        call prin2('solncoefsg=*',solncoefsg(istart),2*kg)
       enddo
 
       pottarg = 0

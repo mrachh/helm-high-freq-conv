@@ -25,7 +25,7 @@
       complex *16, allocatable :: solncoefsg(:),solnexcoefsg(:),
      1   solnexg(:)
       complex *16 fjvals(0:100),fhvals(0:100),fjders(0:100)
-      real *8 dpars(1)
+      real *8 dpars(2)
       real *8, allocatable :: errs(:)
       complex *16 fhders(0:100),zfac
       real *8 xy_in(2),xy_out(2)
@@ -102,7 +102,8 @@ c
       a = 0.0d0
       b = 2*pi
       dpars(1) = 1.0d0
-      ndd_curv = 1
+      dpars(2) = 1.0d0
+      ndd_curv = 2
       ndz_curv = 0
       ndi_curv = 0
       call get_funcurv_geom_uni(a,b,nch,k,npts,srcinfo,
