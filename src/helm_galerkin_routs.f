@@ -34,7 +34,7 @@ c
       subroutine get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
      1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,ndz,zpars,
      2   ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear,wnearcoefs)
-
+      implicit real *8 (a-h,o-z)
       complex *16 zk
       integer nch,k,npts,kg,nptsg
       integer adjs(2,nch)
@@ -107,15 +107,20 @@ c
       nslf = 24
       allocate(tslf0(nslf),wslf0(nslf))
       call load_selfquad_ipv0_iord3(tslf0,wslf0,nslf0)
+      
       print *, "nslf=",nslf
       print *, "nslf0=",nslf0
 
       print *, "done loading self quad"
 
+
       allocate(tslf(2*nslf0,kg),wslf(2*nslf0,kg))
       allocate(xslfmat(k,2*nslf0,kg))
       allocate(pslfmat(k,2*nslf0,kg))
       allocate(zpslfmat(k,2*nslf0,kg))
+      print *, "k=",k
+      print *, "kg=",kg
+      print *, "nslf0=",nslf0
       alpha = 1.0d0
       beta = 0.0d0
       zalpha = 1.0d0
@@ -123,6 +128,7 @@ c
 
       tl = -1.0d0
       tr = 1.0d0
+      print *, "here1"
       do inode=1,kg
         tm = tsg(inode)
         do l=1,nslf0
@@ -134,6 +140,7 @@ c
           call legepols(tslf(l+nslf0,inode),k-1,
      1        pslfmat(1,l+nslf0,inode))
         enddo
+
         call dgemm('t','n',k,2*nslf0,k,alpha,umat,k,
      1     pslfmat(1,1,inode),k,beta,xslfmat(1,1,inode),k)
       enddo
@@ -160,6 +167,9 @@ c
       print *, "done getting adj quad"
       allocate(xintermat(k,mquad),pmat(k,mquad))
       allocate(zpmat(k,mquad))
+      print *, "m=",m
+      print *, "mquad=",mquad
+
       do j=1,mquad
         call legepols(tadj(j),k-1,pmat(1,j))
         zpmat(1:k,j) = pmat(1:k,j)
