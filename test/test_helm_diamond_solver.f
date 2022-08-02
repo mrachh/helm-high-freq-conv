@@ -60,7 +60,7 @@ c
       allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
-      nch0 = 12
+      nch0 = 2
       nch = 4*nch0
       npts = nch*k
       npts_over = nch*nover
@@ -86,14 +86,6 @@ c
      1 qwtsg,nordersg,iptype,ixysg)
       call get_diamond(nch0,nch,nover,npts_over,srcover,
      1 srccoefsover,wover,novers,iptype,ixyso)
-      call prinf('nch0=*',nch0,1)
-      call prinf('nptsg=*',nptsg,1)
-      call prin2('srcinfog=*',srcinfog(3:8,1:nptsg),6*nptsg)
-      call prin2('srccoefsg=*',srccoefsg,6*nptsg)
-      call prin2('qwtsg=*',qwtsg,nptsg)
-      call prinf('nordersg=*',nordersg,nch)
-      call prinf('iptype=*',iptype,nch)
-      call prinf('ixysg=*',ixysg,nch+1)
 
 
 

@@ -79,7 +79,7 @@ c
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
 
-      nch = 100
+      nch = 10
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
