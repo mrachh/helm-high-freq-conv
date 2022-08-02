@@ -1,8 +1,9 @@
-      subroutine  get_funcurv_geom_uni(a,b,nch,k,npts,srcinfo,
+      subroutine  get_funcurv_geom_uni(a,b,nch,k,npts,adjs,srcinfo,
      1   srccoefs,ts1,qwts,norders,iptype,ixys,funcurv,ndd,dpars,ndz,
      2   zpars,ndi,ipars)
       implicit real *8 (a-h,o-z)
       integer nch,k,kg,nover,npts,nptsg,npts_over
+      integer adjs(2,nch)
       real *8 srcinfo(8,npts)
       real *8 srccoefs(6,npts)
       real *8 ts1(npts)
@@ -29,6 +30,9 @@
       do ich=1,nch
         tstart = a+(ich-1.0d0)*h
         tend = a+(ich+0.0d0)*h
+
+        adjs(1,ich) = ich-1
+        adjs(2,ich) = ich+1
 c
 c  get source info
 c
@@ -56,23 +60,31 @@ c
         ixys(ich) = (ich-1)*k+1
       enddo
       ixys(nch+1) = npts+1
+      adjs(1,1) = nch
+      adjs(2,nch) = 1
 
       
       return
       end
-
-      subroutine get_diamond(nch0,nch,k,npts,srcinfo,srccoefs,qwts,
+c
+c
+c
+c
+c
+c
+      subroutine get_diamond(nch0,nch,k,npts,adjs,srcinfo,srccoefs,qwts,
      1  norders,iptype,ixys)
       implicit real *8 (a-h,o-z)
+      integer adjs(2,nch)
       real *8 srcinfo(8,npts),srccoefs(6,npts),qwts(npts)
       integer norders(nch),iptype(nch),ixys(nch+1)
-      integer, allocatable :: ixys0(:)
+      integer, allocatable :: ixys0(:),adjs0(:,:)
       integer ipars(1)
       real *8 dpars(3)
       real *8, allocatable :: ts1(:)
       external absconv_geom
 
-      allocate(ixys0(nch0+1))
+      allocate(ixys0(nch0+1),adjs0(2,nch0))
 
 
 
@@ -92,10 +104,80 @@ c
       do iedge=1,4
         ii = (iedge-1)*nch0 + 1
         istart = ixys(ii) 
-        call get_funcurv_geom_uni(a,b,nch0,k,npts0,srcinfo(1,istart),
+        call get_funcurv_geom_uni(a,b,nch0,k,npts0,adjs0,
+     1   srcinfo(1,istart),
      1   srccoefs(1,istart),ts1,qwts(istart),
      2   norders(ii),iptype(ii),ixys0,absconv_geom,ndd,dpars,ndz,
      2   zpars,ndi,iedge)
+      enddo
+
+      do i=1,nch
+        adjs(1,i) = i-1
+        adjs(2,i) = i+1
+      enddo
+      adjs(1,1) = nch
+      adjs(2,nch) = 1
+
+      
+      return
+      end
+c
+c
+c
+c 
+c
+c
+c
+c
+      subroutine get_diamond_many(nch0,ncomp,rsc,shifts,
+     1  nch,k,npts,adjs,srcinfo,srccoefs,qwts,
+     1  norders,iptype,ixys)
+      implicit real *8 (a-h,o-z)
+      integer ncomp
+      real *8 rsc(ncomp),shifts(2,ncomp)
+      integer adjs(2,nch)
+      real *8 srcinfo(8,npts),srccoefs(6,npts),qwts(npts)
+      integer norders(nch),iptype(nch),ixys(nch+1)
+      integer, allocatable :: ixys0(:),adjs0(:,:)
+      integer ipars(1)
+      real *8 dpars(3)
+      real *8, allocatable :: ts1(:)
+
+      nchcomp = 4*nch0
+      npts0 = nchcomp*k
+      do i=1,nch+1
+        ixys(i) = (i-1)*k+1
+      enddo
+
+
+      allocate(ixys0(nchcomp+1),adjs0(2,nchcomp))
+      do icomp=1,ncomp
+        ichstart = (icomp-1)*nchcomp+1
+        ichend = icomp*nchcomp
+        istart = ixys(ichstart)
+        iend = ixys(ichend+1)-1
+        call get_diamond(nch0,nchcomp,k,npts0,adjs0,srcinfo(1,istart),
+     1   srccoefs(1,istart),qwts(istart),norders(ichstart),
+     2   iptype(ichstart),ixys0)
+        do ipt=istart,iend
+          srcinfo(1,ipt) = srcinfo(1,ipt)*rsc(icomp) + shifts(1,icomp)
+          srcinfo(2,ipt) = srcinfo(2,ipt)*rsc(icomp) + shifts(2,icomp)
+          srcinfo(3,ipt) = srcinfo(3,ipt)*rsc(icomp)
+          srcinfo(4,ipt) = srcinfo(4,ipt)*rsc(icomp)
+          srcinfo(5,ipt) = srcinfo(5,ipt)*rsc(icomp)
+          srcinfo(6,ipt) = srcinfo(6,ipt)*rsc(icomp)
+          srccoefs(1,ipt) = srccoefs(1,ipt)*rsc(icomp) + shifts(1,icomp)
+          srccoefs(2,ipt) = srccoefs(2,ipt)*rsc(icomp) + shifts(2,icomp)
+          srccoefs(3,ipt) = srccoefs(3,ipt)*rsc(icomp)
+          srccoefs(4,ipt) = srccoefs(4,ipt)*rsc(icomp)
+          srccoefs(5,ipt) = srccoefs(5,ipt)*rsc(icomp)
+          srccoefs(6,ipt) = srccoefs(6,ipt)*rsc(icomp)
+          qwts(ipt) = qwts(ipt)*rsc(icomp)
+        enddo
+        do ich=ichstart,ichend
+          adjs(1,ich) = adjs0(1,ich-ichstart+1) + ichstart-1
+          adjs(2,ich) = adjs0(2,ich-ichstart+1) + ichstart-1
+        enddo
       enddo
 
       
@@ -217,3 +299,46 @@ c
 c
 c
 c
+c      subroutine load_cavity_zpars(a,b,m,zpars,ndz)
+c      implicit real *8 (a-h,o-z)
+c      complex *16 zpars(2*m)
+c      real *8, allocatable :: s(:),r(:),th(:),rho(:),z(:)
+c      complex *16, allocatable :: zwork(:)
+c      complex *16 ima
+c      data ima/(0.0d0,1.0d0)/
+c
+c      done = 1
+c      pi = atan(done)*4
+c
+c      ndz = 2*m
+c      lw = 10*ndz + 15
+c      allocate(s(m),r(m),th(m),rho(m),z(m))
+c      allocate(zwork(lw))
+c      call zffti(ndz,zwork)
+c      c = a
+c      hh = c/sqrt(2.0d0)
+c      aa = 1.0d0
+c      bb = 0.0d0
+c      do i=1,m
+c        s(i) = (i-0.5d0)/(m+0.0d0)*pi
+c        suse = (s(i)-pi/2)/a
+c        call qerrfun(suse,rr)
+c        r(i) = 1-a*rr
+c        suse = (s(i)-pi/2)
+c        call crn_fconvgauss(suse, aa, bb, hh, rr, tmp, tmp2)
+c        th(i) = (b-a) + 2*(1.0d0-(b-a)/pi)*rr
+c        rho(i) = r(i)*sin(th(i))
+c        z(i) = r(i)*cos(th(i))
+c      enddo
+c      do i=1,m
+c        zpars(i) = rho(i) + ima*z(i) 
+c        zpars(i+m) = -rho(m-i+1) + ima*(m-i+1)
+c      enddo
+c      call zfftf(ndz,zpars,wsave)
+c      do i=1,ndz
+c        zpars(i) = zpars(i)/(m+0.0d0)
+c      enddo
+c
+c
+c      return
+c      end

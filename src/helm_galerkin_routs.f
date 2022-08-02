@@ -1,12 +1,50 @@
       subroutine get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
-     1   srcinfo,srcinfog,ndz,zpars,nnz,row_ptr,col_ind,nquad,wnear,
-     2   wnearcoefs)
+     1   adjs,srcinfo,srcinfog,ndz,zpars,nnz,row_ptr,col_ind,nquad,
+     2   wnear,wnearcoefs)
       implicit real *8 (a-h,o-z)
       complex *16 zk
       integer nch,k,npts,kg,nptsg
+      integer adjs(2,nch)
       real *8 srcinfo(8,npts),srcinfog(8,nptsg)
       integer nnz,nquad,row_ptr(nptsg+1),col_ind(nnz)
       complex *16 wnear(nquad),wnearcoefs(nquad)
+      real *8 dpars(1)
+      complex *16 zpars(ndz)
+      integer ipars
+      procedure (), pointer :: fker,fkerstab
+      external h2d_comb,h2d_comb_stab
+
+      ndd = 0
+      ndi = 0
+      fker => h2d_comb
+      fkerstab => h2d_comb_stab
+
+      call get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
+     1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,
+     2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear,
+     3   wnearcoefs)
+      return
+      end
+c
+c
+c
+c
+c
+c
+      subroutine get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
+     1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,ndz,zpars,
+     2   ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear,wnearcoefs)
+
+      complex *16 zk
+      integer nch,k,npts,kg,nptsg
+      integer adjs(2,nch)
+      real *8 srcinfo(8,npts),srcinfog(8,nptsg)
+      integer nnz,nquad,row_ptr(nptsg+1),col_ind(nnz)
+      complex *16 wnear(nquad),wnearcoefs(nquad)
+      real *8 dpars(ndd)
+      complex *16 zpars(ndz)
+      integer ipars(ndi)
+
       real *8, allocatable :: tadj(:),wadj(:)
       real *8, allocatable :: srcover(:,:),wover(:)
       real *8, allocatable :: srcoverslf(:,:),woverslf(:)
@@ -22,7 +60,8 @@
       real *8, allocatable :: xint(:,:,:),rdlpcoefs(:,:),rspcoefs(:,:)
       real *8, allocatable :: rdotns_all(:),rdotnt_all(:)
 
-      complex *16 zpars(3),ima,zalpha,zbeta
+      complex *16 ima,zalpha,zbeta
+      external fker,fkerstab
       data ima/(0.0d0,1.0d0)/
 c
 c  get legendre nodes and weights
@@ -49,10 +88,8 @@ c  set up row_ptr and col_ind for this case
 c
 C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,il,ir,j,ipt)
       do ich=1,nch
-        il = ich-1
-        ir = ich+1
-        if(il.le.0) il = nch
-        if(ir.gt.nch) ir = 1
+        il = adjs(1,ich)
+        ir = adjs(2,ich)
         do j=1,kg
           ipt = (ich-1)*kg + j
           col_ind(row_ptr(ipt)) = il
@@ -140,8 +177,6 @@ c     target on left panel, and if j \in[2*k+1,3*k] then target
 c     on right panel
 c
       allocate(zints(kg,3*kg),zints2(kg,3*kg))
-      ndd = 0
-      ndi = 0
 
       allocate(srcover(8,mquad),wover(mquad))
       allocate(fkern(mquad,2*kg))
@@ -160,10 +195,8 @@ C$OMP$PRIVATE(zints2)
       do ich=1,nch
         istart = (ich-1)*k+1
         istartg = (ich-1)*kg+1
-        il = ich-1
-        ir = ich+1
-        if(il.le.0) il = nch
-        if(ir.gt.nch) ir = 1
+        il = adjs(1,ich)
+        ir = adjs(2,ich)
 
         call chunk_to_ldlp_sp_xint(k,kg,ts,tsg,srcinfo(1,istart),
      1     srcinfog(1,istartg),umat,xint,rdlpcoefs,rspcoefs)
@@ -184,7 +217,7 @@ c  start self quadrature now
             srcoverslf(8,j) = -srcoverslf(3,j)/ds
             woverslf(j) = ds*wslf(j,inode)
 
-            call h2d_comb_stab(srcoverslf(1,j),8,srcinfog(1,itarg),
+            call fkerstab(srcoverslf(1,j),8,srcinfog(1,itarg),
      1         rdotns_all(j),rdotnt_all(j),ndd,dpars,ndz,zpars,
      2         ndi,ipars,fkernslf(j))
 c            call h2d_comb(srcoverslf(1,j),8,srcinfog(1,itarg),
@@ -211,10 +244,10 @@ c
           itargr = (ir-1)*kg + j
 
           do l=1,mquad
-            call h2d_comb(srcover(1,l),8,srcinfog(1,itargl),
+            call fker(srcover(1,l),8,srcinfog(1,itargl),
      1        ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j))
             fkern(l,j) = fkern(l,j)*wover(l)
-            call h2d_comb(srcover(1,l),8,srcinfog(1,itargr),
+            call fker(srcover(1,l),8,srcinfog(1,itargr),
      1        ndd,dpars,ndz,zpars,ndi,ipars,fkern(l,j+kg)) 
             fkern(l,j+kg) = fkern(l,j+kg)*wover(l)
           enddo
@@ -253,9 +286,11 @@ C$OMP END PARALLEL DO
 
       return
       end
-
-      
-
+c
+c
+c
+c
+c
       subroutine get_lege_adj_quad(m,nmid,iref,mquad,t,w)
       implicit real *8 (a-h,o-z)
       real *8 t(mquad),w(mquad),umat,vmat

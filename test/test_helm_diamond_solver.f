@@ -15,7 +15,7 @@
       real *8, allocatable :: ts_pts(:)
       integer, allocatable :: norders(:),ixys(:),iptype(:),ixysg(:)
       integer, allocatable :: nordersg(:)
-      integer, allocatable :: novers(:),ixyso(:)
+      integer, allocatable :: novers(:),ixyso(:),adjs(:,:)
       complex *16 zk,zpars(3),ima,z1,z2,ztmp
       complex *16 pottarg,pottargex
       real *8 xyin(2),xyout(2)
@@ -60,14 +60,14 @@ c
       allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
-      nch0 = 2
+      nch0 = 4
       nch = 4*nch0
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
       allocate(srcinfo(8,npts),qwts(npts))
       allocate(srccoefs(6,npts),ts1(npts))
-      allocate(norders(nch),iptype(nch),ixys(nch+1))
+      allocate(norders(nch),iptype(nch),ixys(nch+1),adjs(2,nch))
 
 
       allocate(srcinfog(8,nptsg),srccoefsg(6,nptsg))
@@ -80,12 +80,17 @@ c
       allocate(tsover(npts_over))
 
 
-      call get_diamond(nch0,nch,k,npts,srcinfo,srccoefs,
+      call get_diamond(nch0,nch,k,npts,adjs,srcinfo,srccoefs,
      1 qwts,norders,iptype,ixys)
-      call get_diamond(nch0,nch,kg,nptsg,srcinfog,srccoefsg,
+      call get_diamond(nch0,nch,kg,nptsg,adjs,srcinfog,srccoefsg,
      1 qwtsg,nordersg,iptype,ixysg)
-      call get_diamond(nch0,nch,nover,npts_over,srcover,
+      call get_diamond(nch0,nch,nover,npts_over,adjs,srcover,
      1 srccoefsover,wover,novers,iptype,ixyso)
+
+      do i=1,npts
+        write(33,*) srcinfo(1,i),srcinfo(2,i)
+      enddo
+      stop
 
 
 
@@ -142,9 +147,9 @@ c
       print *, "nptsg=",nptsg
       call cpu_time(t1)
 C$       t1 = omp_get_wtime()     
-      call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,srcinfo,
-     1   srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,wnearg,
-     2   wnearcoefsg)
+      call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,adjs,
+     1   srcinfo,srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,
+     2   nquadg,wnearg,wnearcoefsg)
       call cpu_time(t2)
 C$       t2 = omp_get_wtime()     
       call prin2('total quad gen time=*',t2-t1,1)

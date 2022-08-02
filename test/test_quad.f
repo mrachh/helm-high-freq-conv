@@ -13,7 +13,7 @@
       integer, allocatable :: row_ptrg(:),col_indg(:),iquadg(:)
       complex *16, allocatable :: wnear(:),wnearcoefs(:)
       complex *16, allocatable :: wnearg(:),wnearcoefsg(:)
-      integer, allocatable :: ich_id(:)
+      integer, allocatable :: ich_id(:),adjs(:,:)
       real *8, allocatable :: ts_pts(:)
       integer, allocatable :: norders(:),ixys(:),iptype(:),ixysg(:)
       integer, allocatable :: nordersg(:)
@@ -86,6 +86,7 @@ c
       allocate(srcinfo(8,npts),qwts(npts))
       allocate(srccoefs(6,npts),ts1(npts))
       allocate(norders(nch),iptype(nch),ixys(nch+1))
+      allocate(adjs(2,nch))
 
 
       allocate(srcinfog(8,nptsg),srccoefsg(6,nptsg))
@@ -106,13 +107,13 @@ c
       ndd_curv = 2
       ndz_curv = 0
       ndi_curv = 0
-      call get_funcurv_geom_uni(a,b,nch,k,npts,srcinfo,
+      call get_funcurv_geom_uni(a,b,nch,k,npts,adjs,srcinfo,
      1  srccoefs,ts1,qwts,norders,iptype,ixys,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
       print *, "nch=",nch
       print *, "kg=",kg
       print *, "nptsg=",nptsg
-      call get_funcurv_geom_uni(a,b,nch,kg,nptsg,srcinfog,
+      call get_funcurv_geom_uni(a,b,nch,kg,nptsg,adjs,srcinfog,
      1  srccoefsg,ts1g,qwtsg,nordersg,iptype,ixysg,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
       call prin2('a=*',a,1)
@@ -123,7 +124,7 @@ c
       print *, "a=",a
       print *, "b=",b
       print *, "npts_over=",npts_over
-      call get_funcurv_geom_uni(a,b,nch,nover,npts_over,srcover,
+      call get_funcurv_geom_uni(a,b,nch,nover,npts_over,adjs,srcover,
      1  srccoefsover,tsover,wover,novers,iptype,ixyso,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
 
@@ -224,10 +225,12 @@ c
       print *, "nch=",nch
       call cpu_time(t1)
 C$       t1 = omp_get_wtime()      
-      call get_helm_dir_trid_quad_corr(zk,nch,k,k,npts,npts,srcinfo,
-     1   srcinfo,ndz,zpars,nnz,row_ptr,col_ind,nquad,wnear,wnearcoefs)
+      call get_helm_dir_trid_quad_corr(zk,nch,k,k,npts,npts,adjs,
+     1   srcinfo,srcinfo,ndz,zpars,nnz,row_ptr,col_ind,nquad,
+     2   wnear,wnearcoefs)
       
-      call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,srcinfo,
+      call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,adjs,
+     1   srcinfo,
      1   srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,wnearg,
      2   wnearcoefsg)
       call cpu_time(t2)
