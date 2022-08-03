@@ -44,6 +44,8 @@
       procedure (), pointer :: fker,fkerstab
       external h2d_comb,h2d_comb_stab,h2d_sprime,h2d_sprime_stab
       external h2d_transmission_neu,h2d_transmission_neu_stab
+      complex *16 ima
+      data ima/(0.0d0,1.0d0)/
 
       ndd = 0
       ndi = 0
@@ -67,7 +69,8 @@
 
       call get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
      1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,
-     2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear(1,2),
+     2   ndz_use,zpars_use,ndi,ipars,nnz,row_ptr,
+     2   col_ind,nquad,wnear(1,2),
      3   wnearcoefs(1,2))
 
 
@@ -78,7 +81,8 @@
 
       call get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
      1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,
-     2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear(1,3),
+     2   ndz_use,zpars_use,ndi,ipars,nnz,row_ptr,
+     1   col_ind,nquad,wnear(1,3),
      3   wnearcoefs(1,3))
 
 
@@ -87,15 +91,15 @@
       zpars_use(2) = ima*zk
       zpars_use(3) = 0
       zpars_use(4) = 0
-      zpars_use(5) = 1
-      zpars_use(6) = -1
+      zpars_use(5) = 1.0d0
+      zpars_use(6) = -1.0d0
       fker => h2d_transmission_neu
       fkerstab => h2d_transmission_neu_stab
 
       call get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
      1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,
-     2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear(1,4),
-     3   wnearcoefs(1,4))
+     2   ndz_use,zpars_use,ndi,ipars,nnz,row_ptr,col_ind,
+     2   nquad,wnear(1,4),wnearcoefs(1,4))
 
       return
       end
@@ -756,7 +760,7 @@ c
       real *8, allocatable :: radsrc(:)
       real *8, allocatable :: srctmp2(:,:)
       complex *16, allocatable :: ctmp2(:),dtmp2(:)
-      complex *16 zgrad(2),zgrad2(2)
+      complex *16 zgrad(2),zgrad2(2),ima
       real *8, allocatable :: dipvec2(:,:)
       real *8 thresh,ra
       real *8 rr,rmin
@@ -767,6 +771,7 @@ c
       integer nd,ntarg0
 
       real *8 ttot,done,pi
+      data ima/(0.0d0,1.0d0)/
 
       parameter (nd=1,ntarg0=1)
 
@@ -877,14 +882,13 @@ C$      t1 = omp_get_wtime()
       call cpu_time(t2)
 C$      t2 = omp_get_wtime()
 
-            
+      print *, "after Sk fmm"
       timeinfo(1) = t2-t1
 C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
       do i=1,npts
         pot(i) = grad1(1,i)*srcvals(7,i) + grad1(2,i)*srcvals(8,i)
       enddo
 C$OMP END PARALLEL DO
-      
 
 c
 c       add in precomputed quadrature
@@ -909,6 +913,7 @@ C$OMP$PRIVATE(jstart,pottmp,npols,l)
 C$OMP END PARALLEL DO
 C
 
+      print *, "after Sk quadcorr"
 c
 
 C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2)
@@ -938,6 +943,7 @@ C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,zgrad,npover)
 C$      t2 = omp_get_wtime()     
 
       timeinfo(2) = t2-t1
+      print *, "after Sk subtract"
       
 c
 c
@@ -946,7 +952,8 @@ c  and S_{ik}' \sigma and store it in pot1
 c
 
       allocate(potik(npts))
-      zkuse = ima*zk
+      zkuse = ima*zpars(1)
+      print *, "zkuse=",zkuse
       
 
 C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)      
@@ -999,7 +1006,7 @@ C$OMP$PRIVATE(jstart,pottmp,npols,l)
           do l=1,npols
              potik(i) = potik(i)+wnearcoefs(jquadstart+l-1,2)*
      1         sigmacoefs(jstart+l-1)
-             pot1(i)=pot(i)+wnearcoefs(jquadstart+l-1,3)*
+             pot1(i)=pot1(i)+wnearcoefs(jquadstart+l-1,3)*
      1         sigmacoefs(jstart+l-1)
           enddo
         enddo
@@ -1164,7 +1171,6 @@ c   finish the fmm part of both the evaluations together,
 c   add the combined quadrature correction, and then subtract
 c   both fmm contributions
 c
-
 C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)      
       do i=1,ns
         dipstr(i) = potikover(i)*whtsover(i)
@@ -1185,10 +1191,10 @@ C$OMP END PARALLEL DO
 c
 c
 c       call the fmm
-c
+c  
       call cpu_time(t1)
 C$      t1 = omp_get_wtime()      
-      call hfmm2d(nd,eps,zk,ns,sources,ifcharge,charges,
+      call hfmm2d(nd,eps,zpars(1),ns,sources,ifcharge,charges,
      1  ifdipole,dipstr,dipvec,iper,ifpgh,tmp,tmp,tmp,ntarg,
      1  targvals,ifpghtarg,zpottmp,grad1,tmp,ier)
       call cpu_time(t2)
@@ -1240,7 +1246,6 @@ C$OMP END PARALLEL DO
 C
 
 c
-
 C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2)
 C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,zgrad,npover)
 C$OMP$PRIVATE(zgrad2)
@@ -1262,7 +1267,7 @@ C$OMP$PRIVATE(zgrad2)
         val = 0
         zgrad = 0
         zgrad2 = 0
-        call h2d_directdg(nd,zk,srctmp2,nss,dtmp2,dipvec2,
+        call h2d_directdg(nd,zpars(1),srctmp2,nss,dtmp2,dipvec2,
      1        targvals(1,i),1,val,zgrad,thresh)
         call h2d_directdg(nd,zkuse,srctmp2,nss,dtmp2,dipvec2,
      1        targvals(1,i),1,val,zgrad2,thresh)

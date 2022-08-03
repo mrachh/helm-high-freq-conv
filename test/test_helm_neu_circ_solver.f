@@ -38,7 +38,7 @@
       zk = 1.0d0
       ndz = 3
       zpars(1) = zk
-      zpars(2) = zk
+      zpars(2) = zk*0
 
       alpha = 1.0d0
       beta = 0.0d0
@@ -61,7 +61,7 @@ c
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
 
-      nch = 20
+      nch = 5
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
@@ -171,8 +171,6 @@ C$       t1 = omp_get_wtime()
 C$       t2 = omp_get_wtime()     
       call prin2('total quad gen time=*',t2-t1,1)
       call prinf('nnzg=*',nnzg,1)
-
-
       allocate(iquadg(nnzg+1))
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
@@ -187,7 +185,7 @@ C$       t2 = omp_get_wtime()
      1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
      3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
-     4  solncoefsg)
+     4  solncoefsg,solnikcoefsg)
 
       call h2d_slp(xyout,2,xyin,ndd,dpars,1,zk,ndi,ipars,pottargex)
       do i=1,nch

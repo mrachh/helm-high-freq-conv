@@ -35,6 +35,7 @@
 
       zk = 100.0d0 + 0.0d0*ima
       zk = 1.0d0
+      zk = 80.0d0
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
@@ -51,7 +52,7 @@ c  nover is the oversampled source order
 c
 
       k = 22
-      kg = 16
+      kg = 18
       nover = 30
       itype = 2
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
@@ -61,7 +62,7 @@ c
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
 
-      nch = 20
+      nch = 1600
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
