@@ -25,6 +25,84 @@
      3   wnearcoefs)
       return
       end
+
+
+      subroutine get_helm_neu_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
+     1   adjs,srcinfo,srcinfog,ndz,zpars,nnz,row_ptr,col_ind,nquad,
+     2   wnear,wnearcoefs)
+      implicit real *8 (a-h,o-z)
+      complex *16 zk
+      integer nch,k,npts,kg,nptsg
+      integer adjs(2,nch)
+      real *8 srcinfo(8,npts),srcinfog(8,nptsg)
+      integer nnz,nquad,row_ptr(nptsg+1),col_ind(nnz)
+      complex *16 wnear(nquad,4),wnearcoefs(nquad,4)
+      real *8 dpars(1)
+      complex *16 zpars(ndz)
+      complex *16 zpars_use(6)
+      integer ipars
+      procedure (), pointer :: fker,fkerstab
+      external h2d_comb,h2d_comb_stab,h2d_sprime,h2d_sprime_stab
+      external h2d_transmission_neu,h2d_transmission_neu_stab
+
+      ndd = 0
+      ndi = 0
+
+      ndz_use = 1
+      zpars_use(1) = zk
+      fker => h2d_sprime
+      fkerstab => h2d_sprime_stab
+
+      call get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
+     1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,
+     2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear(1,1),
+     3   wnearcoefs(1,1))
+
+      ndz_use = 3
+      zpars_use(1) = ima*zk
+      zpars_use(2) = 1.0d0
+      zpars_use(3) = 0.0d0
+      fker => h2d_comb
+      fkerstab => h2d_comb_stab
+
+      call get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
+     1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,
+     2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear(1,2),
+     3   wnearcoefs(1,2))
+
+
+      ndz_use = 1
+      zpars_use(1) = ima*zk
+      fker => h2d_sprime
+      fkerstab => h2d_sprime_stab
+
+      call get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
+     1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,
+     2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear(1,3),
+     3   wnearcoefs(1,3))
+
+
+      ndz_use = 6
+      zpars_use(1) = zk
+      zpars_use(2) = ima*zk
+      zpars_use(3) = 0
+      zpars_use(4) = 0
+      zpars_use(5) = 1
+      zpars_use(6) = -1
+      fker => h2d_transmission_neu
+      fkerstab => h2d_transmission_neu_stab
+
+      call get_helm_guru_trid_quad_corr(zk,nch,k,kg,npts,nptsg,
+     1   adjs,srcinfo,srcinfog,fker,fkerstab,ndd,dpars,
+     2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,wnear(1,4),
+     3   wnearcoefs(1,4))
+
+      return
+      end
+
+
+
+
 c
 c
 c
@@ -609,6 +687,617 @@ c
 c
 c
 c
+c
+c
+      subroutine lpcomp_galerkin_neu_helm2d(nch,k,ixys,npts,
+     1  srcvals,eps,zpars,nnz,row_ptr,
+     2  col_ind,iquad,nquad,wnearcoefs,sigmacoefs,nover,
+     3  nptso,ixyso,srcover,whtsover,potcoefs,potikcoefs)
+c
+c  This subroutine evaluates the helmholtz right preconditioned
+c   neumann integral equation
+c
+c     -i*zpars(2)*(-I/2 + S_{k}') + (D_{k}' - D_{ik}')*S_{ik} + S_{ik}'S_{ik}'
+c         -I/4
+c
+c   and also returns S_{ik}[\sigma]
+c
+c
+      implicit real *8 (a-h,o-z)
+      integer nch,k,ixys(nch+1),npts
+      real *8 srcvals(8,npts),eps
+      complex *16 zpars(3)
+      integer nnz,row_ptr(npts+1),col_ind(nnz),iquad(nnz+1)
+      integer nquad
+      complex *16 wnearcoefs(nquad,4),sigmacoefs(npts)
+      integer nover,nptso,ixyso(nch+1)
+      real *8 srcover(8,nptso),whtsover(nptso)
+      complex *16 potcoefs(npts),potikcoefs(npts)
+
+      integer norder,npols,npolso
+      complex *16, allocatable :: potsort(:)
+
+      real *8, allocatable :: sources(:,:),targvals(:,:)
+      complex *16, allocatable :: charges(:),dipstr(:),sigmaover(:)
+      complex *16, allocatable :: pot(:),grad(:,:),zpottmp(:)
+      complex *16, allocatable :: pot1(:),grad1(:,:),pot1coefs(:)
+      complex *16, allocatable :: pot1over(:),potikover(:)
+      complex *16, allocatable :: pot2(:),pot2coefs(:),zgradtmp(:,:)
+      complex *16, allocatable :: pot3(:),pot3coefs(:),potik(:)
+      complex *16, allocatable :: abc(:)
+      real *8, allocatable :: dipvec(:,:)
+      integer ns,nt
+      real *8 dalpha,dbeta
+      complex *16 alpha,beta
+      integer ifcharge,ifdipole
+      integer ifpgh,ifpghtarg
+      complex *16 tmp(10),val,zkuse,zpars_use(10)
+
+      real *8 xmin,xmax,ymin,ymax,zmin,zmax,sizey,sizez,boxsize
+
+
+      integer i,j,jpatch,jquadstart,jstart
+
+
+      integer ifaddsub
+
+      integer ntj
+      
+      complex *16 zdotu,pottmp
+      real *8 radexp,epsfmm
+      real *8, allocatable :: tso(:),wso(:)
+      real *8, allocatable :: ts(:),umat(:,:),vmat(:,:),wts(:)
+      real *8, allocatable :: pmat(:,:)
+      real *8 umato,vmato
+
+      integer ipars
+      real *8 dpars,timeinfo(10),t1,t2,omp_get_wtime
+
+      real *8, allocatable :: radsrc(:)
+      real *8, allocatable :: srctmp2(:,:)
+      complex *16, allocatable :: ctmp2(:),dtmp2(:)
+      complex *16 zgrad(2),zgrad2(2)
+      real *8, allocatable :: dipvec2(:,:)
+      real *8 thresh,ra
+      real *8 rr,rmin
+      real *8 over4pi
+      integer nss,ii,l,npover
+      integer nmax,ier,iper
+
+      integer nd,ntarg0
+
+      real *8 ttot,done,pi
+
+      parameter (nd=1,ntarg0=1)
+
+      ns = nptso
+      ntarg = npts
+      done = 1
+      pi = atan(done)*4
+
+      itype = 2
+      allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
+      call legeexps(itype,k,ts,umat,vmat,wts)
+
+      itype = 1
+      
+      allocate(tso(nover),wso(nover))
+      call legeexps(itype,nover,tso,umato,vmato,wso)
+
+
+c
+c    estimate max number of sources in neear field of 
+c    any target
+c
+      nmax = 0
+      call get_near_corr_max2d(ntarg,row_ptr,nnz,col_ind,nch,
+     1  ixyso,nmax)
+      allocate(srctmp2(2,nmax),ctmp2(nmax),dtmp2(nmax))
+      allocate(dipvec2(2,nmax))
+           
+      allocate(sources(2,ns),targvals(2,ntarg))
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)      
+      do i=1,ns
+        sources(1,i) = srcover(1,i)
+        sources(2,i) = srcover(2,i)
+      enddo
+C$OMP END PARALLEL DO     
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
+      do i=1,ntarg
+        targvals(1,i) = srcvals(1,i)
+        targvals(2,i) = srcvals(2,i)
+      enddo
+C$OMP END PARALLEL DO      
+
+
+c
+c        compute threshold for ignoring local computation
+c
+      call get_fmm2d_thresh(2,ns,sources,2,ntarg,targvals,thresh)
+
+
+c
+c  compute siksigma
+c
+c
+c
+c   Now compute S'_{k}[\sigma] and store in pot
+c
+c
+      allocate(charges(ns),dipstr(ns),dipvec(2,ns))
+      allocate(sigmaover(ns))
+
+      allocate(zpottmp(npts),pot(npts))
+      allocate(pot1(npts),grad1(2,npts),pot1coefs(npts))
+      allocate(zgradtmp(2,npts))
+
+c 
+c   evaluate density at oversampled nodes: assumes all
+c   oversampled orders are identical
+c
+      allocate(pmat(k,nover))
+      do i=1,nover
+        call legepols(tso(i),k-1,pmat(1,i))
+      enddo
+      
+      dalpha = 1.0d0
+      dbeta = 0.0d0
+      do i=1,nch
+        istart = ixys(i)
+        istarto = ixyso(i)
+        call dgemm('n','n',2,nover,k,dalpha,sigmacoefs(istart),2,pmat,
+     1    k,dbeta,sigmaover(istarto),2)
+      enddo
+c
+c       set relevatn parameters for the fmm
+c
+      alpha = zpars(2)
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)      
+      do i=1,ns
+        charges(i) = sigmaover(i)*whtsover(i)*alpha*ima
+      enddo
+C$OMP END PARALLEL DO      
+
+      ifcharge = 1
+      ifdipole = 0
+      ifpgh = 0
+      ifpghtarg = 2
+c
+c
+c       call the fmm
+c
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()      
+      call hfmm2d(nd,eps,zpars(1),ns,sources,ifcharge,charges,
+     1  ifdipole,dipstr,dipvec,iper,ifpgh,tmp,tmp,tmp,ntarg,
+     1  targvals,ifpghtarg,zpottmp,grad1,tmp,ier)
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()
+
+            
+      timeinfo(1) = t2-t1
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
+      do i=1,npts
+        pot(i) = grad1(1,i)*srcvals(7,i) + grad1(2,i)*srcvals(8,i)
+      enddo
+C$OMP END PARALLEL DO
+      
+
+c
+c       add in precomputed quadrature
+
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart)
+C$OMP$PRIVATE(jstart,pottmp,npols,l)
+      do i=1,ntarg
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          npols = ixys(jpatch+1)-ixys(jpatch)
+          jquadstart = iquad(j)
+          jstart = ixys(jpatch) 
+          do l=1,npols
+             pot(i) = pot(i)+wnearcoefs(jquadstart+l-1,1)*
+     1         sigmacoefs(jstart+l-1)*ima*alpha
+          enddo
+        enddo
+      enddo
+C$OMP END PARALLEL DO
+C
+
+c
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2)
+C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,zgrad,npover)
+      do i=1,ntarg
+        nss = 0
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          do l=ixyso(jpatch),ixyso(jpatch+1)-1
+            nss = nss+1
+            srctmp2(1,nss) = srcover(1,l)
+            srctmp2(2,nss) = srcover(2,l)
+
+            ctmp2(nss) = charges(l)
+          enddo
+        enddo
+
+        val = 0
+        zgrad = 0
+        call h2d_directcg(nd,zpars(1),srctmp2,nss,ctmp2,
+     1        targvals(1,i),1,val,zgrad,thresh)
+        pot(i) = pot(i) - zgrad(1)*srcvals(7,i)
+        pot(i) = pot(i) - zgrad(2)*srcvals(8,i)
+      enddo
+      
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()     
+
+      timeinfo(2) = t2-t1
+      
+c
+c
+c  Now compute S_{ik} \sigma and store it in potik, potikcoefs
+c  and S_{ik}' \sigma and store it in pot1
+c
+
+      allocate(potik(npts))
+      zkuse = ima*zk
+      
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)      
+      do i=1,ns
+        charges(i) = sigmaover(i)*whtsover(i)
+      enddo
+C$OMP END PARALLEL DO      
+
+      ifcharge = 1
+      ifdipole = 0
+      ifpgh = 0
+      ifpghtarg = 2
+      grad1 = 0
+      potik = 0
+c
+c
+c       call the fmm
+c
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()      
+      call hfmm2d(nd,eps,zkuse,ns,sources,ifcharge,charges,
+     1  ifdipole,dipstr,dipvec,iper,ifpgh,tmp,tmp,tmp,ntarg,
+     1  targvals,ifpghtarg,potik,grad1,tmp,ier)
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()
+
+            
+      timeinfo(1) = t2-t1
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
+      do i=1,npts
+        pot1(i) = grad1(1,i)*srcvals(7,i) + grad1(2,i)*srcvals(8,i)
+      enddo
+C$OMP END PARALLEL DO
+      
+
+c
+c       add in precomputed quadrature
+
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart)
+C$OMP$PRIVATE(jstart,pottmp,npols,l)
+      do i=1,ntarg
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          npols = ixys(jpatch+1)-ixys(jpatch)
+          jquadstart = iquad(j)
+          jstart = ixys(jpatch) 
+          do l=1,npols
+             potik(i) = potik(i)+wnearcoefs(jquadstart+l-1,2)*
+     1         sigmacoefs(jstart+l-1)
+             pot1(i)=pot(i)+wnearcoefs(jquadstart+l-1,3)*
+     1         sigmacoefs(jstart+l-1)
+          enddo
+        enddo
+      enddo
+C$OMP END PARALLEL DO
+C
+
+c
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2)
+C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,zgrad,npover)
+      do i=1,ntarg
+        nss = 0
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          do l=ixyso(jpatch),ixyso(jpatch+1)-1
+            nss = nss+1
+            srctmp2(1,nss) = srcover(1,l)
+            srctmp2(2,nss) = srcover(2,l)
+
+            ctmp2(nss) = charges(l)
+          enddo
+        enddo
+
+        val = 0
+        zgrad = 0
+        call h2d_directcg(nd,zkuse,srctmp2,nss,ctmp2,
+     1        targvals(1,i),1,val,zgrad,thresh)
+        potik(i) = potik(i) - val
+        pot1(i) = pot1(i) - zgrad(1)*srcvals(7,i)
+        pot1(i) = pot1(i) - zgrad(2)*srcvals(8,i)
+      enddo
+      
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()    
+
+
+      do i=1,nch
+        istart = ixys(i)
+        call dgemm('n','t',2,k,k,dalpha,potik(istart),2,umat,k,dbeta,
+     1     potikcoefs(istart),2)
+        call dgemm('n','t',2,k,k,dalpha,pot1(istart),2,umat,k,dbeta,
+     1     pot1coefs(istart),2)
+      enddo
+c
+c
+c  potikcoefs now stores S_{ik}[\sigma] and 
+c  pot1coefs now stores S'_{ik}[\sigma]
+c
+
+c
+c  oversample the new densities
+c
+c
+
+      allocate(pot1over(ns),potikover(ns))
+      dalpha = 1.0d0
+      dbeta = 0.0d0
+      do i=1,nch
+        istart = ixys(i)
+        istarto = ixyso(i)
+        call dgemm('n','n',2,nover,k,dalpha,pot1coefs(istart),2,pmat,
+     1    k,dbeta,pot1over(istarto),2)
+        call dgemm('n','n',2,nover,k,dalpha,potikcoefs(istart),2,pmat,
+     1    k,dbeta,potikover(istarto),2)
+      enddo
+
+c
+c   Now compute S_{ik}'[pot1] and add to pot
+c
+c
+      
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)      
+      do i=1,ns
+        charges(i) = pot1over(i)*whtsover(i)
+      enddo
+C$OMP END PARALLEL DO      
+
+      ifcharge = 1
+      ifdipole = 0
+      ifpgh = 0
+      ifpghtarg = 2
+      grad1 = 0
+      zpottmp = 0
+c
+c
+c       call the fmm
+c
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()      
+      call hfmm2d(nd,eps,zkuse,ns,sources,ifcharge,charges,
+     1  ifdipole,dipstr,dipvec,iper,ifpgh,tmp,tmp,tmp,ntarg,
+     1  targvals,ifpghtarg,zpottmp,grad1,tmp,ier)
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()
+
+            
+      timeinfo(1) = t2-t1
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
+      do i=1,npts
+        pot(i) = pot(i)+grad1(1,i)*srcvals(7,i)+grad1(2,i)*srcvals(8,i)
+      enddo
+C$OMP END PARALLEL DO
+      
+
+c
+c       add in precomputed quadrature
+
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart)
+C$OMP$PRIVATE(jstart,pottmp,npols,l)
+      do i=1,ntarg
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          npols = ixys(jpatch+1)-ixys(jpatch)
+          jquadstart = iquad(j)
+          jstart = ixys(jpatch) 
+          do l=1,npols
+             pot(i) = pot(i)+wnearcoefs(jquadstart+l-1,3)*
+     1         pot1coefs(jstart+l-1)
+          enddo
+        enddo
+      enddo
+C$OMP END PARALLEL DO
+C
+
+c
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2)
+C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,zgrad,npover)
+      do i=1,ntarg
+        nss = 0
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          do l=ixyso(jpatch),ixyso(jpatch+1)-1
+            nss = nss+1
+            srctmp2(1,nss) = srcover(1,l)
+            srctmp2(2,nss) = srcover(2,l)
+
+            ctmp2(nss) = charges(l)
+          enddo
+        enddo
+
+        val = 0
+        zgrad = 0
+        call h2d_directcg(nd,zkuse,srctmp2,nss,ctmp2,
+     1        targvals(1,i),1,val,zgrad,thresh)
+        pot(i) = pot(i) - zgrad(1)*srcvals(7,i)
+        pot(i) = pot(i) - zgrad(2)*srcvals(8,i)
+      enddo
+      
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()    
+
+c
+c  Finished adding S_{ik}'^2[\sigma] to pot now, only 
+c   [D_{k}' - D_{ik}'][potik] remains, for this we
+c   finish the fmm part of both the evaluations together, 
+c   add the combined quadrature correction, and then subtract
+c   both fmm contributions
+c
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)      
+      do i=1,ns
+        dipstr(i) = potikover(i)*whtsover(i)
+        dipvec(1,i) = srcover(7,i)
+        dipvec(2,i) = srcover(8,i)
+      enddo
+C$OMP END PARALLEL DO      
+
+
+
+      ifcharge = 0
+      ifdipole = 1
+      ifpgh = 0
+      ifpghtarg = 2
+      grad1 = 0
+      zgradtmp = 0
+      zpottmp = 0
+c
+c
+c       call the fmm
+c
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()      
+      call hfmm2d(nd,eps,zk,ns,sources,ifcharge,charges,
+     1  ifdipole,dipstr,dipvec,iper,ifpgh,tmp,tmp,tmp,ntarg,
+     1  targvals,ifpghtarg,zpottmp,grad1,tmp,ier)
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()
+
+      zpottmp = 0
+c
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()      
+      call hfmm2d(nd,eps,zkuse,ns,sources,ifcharge,charges,
+     1  ifdipole,dipstr,dipvec,iper,ifpgh,tmp,tmp,tmp,ntarg,
+     1  targvals,ifpghtarg,zpottmp,zgradtmp,tmp,ier)
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()
+
+            
+            
+      timeinfo(1) = t2-t1
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i)
+      do i=1,npts
+        pot(i) = pot(i)+grad1(1,i)*srcvals(7,i)+grad1(2,i)*srcvals(8,i)
+        pot(i) = pot(i)-zgradtmp(1,i)*srcvals(7,i) -
+     1      zgradtmp(2,i)*srcvals(8,i)
+      enddo
+C$OMP END PARALLEL DO
+      
+
+c
+c       add in precomputed quadrature
+
+      call cpu_time(t1)
+C$      t1 = omp_get_wtime()
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart)
+C$OMP$PRIVATE(jstart,pottmp,npols,l)
+      do i=1,ntarg
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          npols = ixys(jpatch+1)-ixys(jpatch)
+          jquadstart = iquad(j)
+          jstart = ixys(jpatch) 
+          do l=1,npols
+             pot(i) = pot(i)+wnearcoefs(jquadstart+l-1,4)*
+     1         potikcoefs(jstart+l-1)
+          enddo
+        enddo
+      enddo
+C$OMP END PARALLEL DO
+C
+
+c
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2)
+C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,zgrad,npover)
+C$OMP$PRIVATE(zgrad2)
+      do i=1,ntarg
+        nss = 0
+        do j=row_ptr(i),row_ptr(i+1)-1
+          jpatch = col_ind(j)
+          do l=ixyso(jpatch),ixyso(jpatch+1)-1
+            nss = nss+1
+            srctmp2(1,nss) = srcover(1,l)
+            srctmp2(2,nss) = srcover(2,l)
+
+            dtmp2(nss) = dipstr(l)
+            dipvec2(1,nss) = dipvec(1,l)
+            dipvec2(2,nss) = dipvec(2,l)
+          enddo
+        enddo
+
+        val = 0
+        zgrad = 0
+        zgrad2 = 0
+        call h2d_directdg(nd,zk,srctmp2,nss,dtmp2,dipvec2,
+     1        targvals(1,i),1,val,zgrad,thresh)
+        call h2d_directdg(nd,zkuse,srctmp2,nss,dtmp2,dipvec2,
+     1        targvals(1,i),1,val,zgrad2,thresh)
+        pot(i) = pot(i) - zgrad(1)*srcvals(7,i)
+        pot(i) = pot(i) - zgrad(2)*srcvals(8,i)
+        pot(i) = pot(i) + zgrad2(1)*srcvals(7,i)
+        pot(i) = pot(i) + zgrad2(2)*srcvals(8,i)
+      enddo
+      
+      call cpu_time(t2)
+C$      t2 = omp_get_wtime()    
+c
+c
+c  Done computing the non-identity part of the Neumann
+c  boundary value problem
+c
+      
+      ttot = timeinfo(1) + timeinfo(2)
+      do i=1,nch
+        istart = ixys(i)
+        call dgemm('n','t',2,k,k,dalpha,pot(istart),2,umat,k,dbeta,
+     1     potcoefs(istart),2)
+      enddo
+
+
+      
+      return
+      end
+c
+c
+c
+c
+c
+c
+
       subroutine helm_comb_dir_galerkin_solver2d(nch,k,ixys,
      1    npts,srcvals,eps,zpars,nnz,row_ptr,col_ind,iquad,
      2    nquad,wnearcoefs,nover,npts_over,ixyso,srcover,wover,
@@ -889,6 +1578,314 @@ c
      1    srcvals,eps,zpars,nnz,row_ptr,col_ind,iquad,
      2    nquad,wnearcoefs,solncoefs,nover,npts_over,ixyso,
      3    srcover,wover,wtmp)
+
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:rres)            
+          do i=1,npts
+            rres = rres + abs(zid*solncoefs(i) + wtmp(i)-rhscoefs(i))**2
+          enddo
+C$OMP END PARALLEL DO          
+          rres = sqrt(rres)/rb
+          niter = it
+          return
+        endif
+      enddo
+c
+      return
+      end
+c
+c
+c
+c
+c
+c        
+
+      subroutine helm_comb_neu_galerkin_solver2d(nch,k,ixys,
+     1    npts,srcvals,eps,zpars,nnz,row_ptr,col_ind,iquad,
+     2    nquad,wnearcoefs,nover,npts_over,ixyso,srcover,wover,
+     2    numit,ifinout,rhscoefs,eps_gmres,niter,errs,rres,solncoefs,
+     3    solnikcoefs)
+c
+c  Solve the Helmholtz boundary value problem using the combined 
+c  field integral equation
+c
+c  .. math ::
+c  
+c      u = (\alpha \mathcal{S}_{k} + \beta \mathcal{D}_{k})
+c
+c  Same ordered chunks, and same order oversampling
+c
+c  Input arguments:
+c    - nch: integer
+c        number of chunks
+c    - k: integer
+c        order of discretization
+c    - ixys: integer(nch+1)
+c        starting location of data on patch i
+c    - npts: integer
+c        total number of discretization points on the boundary
+c    - srcvals: real *8 (8,npts)
+c        x,y,dxdt,dydt,dxdt2,dydt2,rnx,rny at the discretization nodes
+c    - eps: real *8
+c        precision requested
+c    - zpars: complex *16 (3)
+c        kernel parameters (Referring to formula (1))
+c        zpars(1) = k 
+c        zpars(2) = alpha
+c        zpars(3) = beta
+c    - nnz: integer
+c        number of non-zero entries in quadrature correction array
+c    - row_ptr: integer(npts+1)
+c        row_ptr(i) is the pointer to col_ind array where list of 
+c        relevant source patches for target i start
+c    - col_ind: integer (nnz)
+c        list of source patches relevant for all targets, sorted
+c        by the target number
+c    - iquad: integer(nnz+1)
+c        location in wnear array where quadrature for col_ind(i)
+c        starts
+c    - nquad: integer
+c        number of entries in wnear
+c    - wnearcoefs: complex *16 (nquad)
+c        quadrature corrections in coefficient land
+c    - nover: integer
+c        oversampling parameter
+c    - npts_over: integer
+c        total number of oversampled points
+c    - ixyso: integer(nch+1)
+c        starting location for oversampled data
+c    - srcover: real *8 (8,npts_over)
+c        total number of oversampled points
+c    - wover: real *8(npts_over)
+c        oversampled smooth quadrature weights
+c        
+c    - numit: integer
+c        max number of gmres iterations
+c    - ifinout: integer
+c        flag for interior or exterior problems (normals assumed to 
+c        be pointing in exterior of region)
+c        * ifinout = 0, interior problem
+c        * ifinout = 1, exterior problem
+c    - rhscoefs: complex *16(npts)
+c        right hand side
+c    - eps_gmres: real *8
+c        gmres tolerance requested
+c 
+c  Output arguments:
+c    - niter: integer
+c        number of gmres iterations required for relative residual
+c    - errs: real *8 (1:niter)
+c        relative residual as a function of iteration number
+c    - rres: real *8
+c        relative residual for computed solution
+c    - solncoefs: complex *16(npts)
+c        density which solves the neumann problem
+c    - solnikcoefs: complex *16(npts)
+c         S_{ik}[\sigma], where \sigma is the solution
+c-----------------------------------
+c
+      implicit none
+      integer nch,k,npts,ixys(nch+1)
+      real *8 srcvals(8,npts),eps,eps_gmres
+      complex *16 zpars(3)
+      complex *16 rhscoefs(npts)
+      complex *16 solncoefs(npts),solnikcoefs(npts)
+      integer nnz,row_ptr(npts+1),col_ind(nnz),iquad(nnz+1)
+      integer nquad
+      complex *16 wnearcoefs(nquad)
+      integer nover,npts_over,ixyso(nch+1)
+      real *8 srcover(8,npts_over),wover(npts_over)
+      integer numit,ifinout
+
+
+      real *8 errs(numit+1)
+      real *8 rres,eps2
+      integer niter
+
+
+      integer i,j,jpatch,jquadstart,jstart
+
+      integer ipars
+      real *8 dpars,timeinfo(10),t1,t2,omp_get_wtime
+      real *8 ttot,done,pi
+
+c
+c
+c       gmres variables
+c
+      complex *16 zid,ztmp
+      real *8 rb,wnrm2
+      integer it,iind,it1,l
+      real *8 rmyerr
+      complex *16 temp
+      complex *16, allocatable :: vmat(:,:),hmat(:,:)
+      complex *16, allocatable :: cs(:),sn(:)
+      complex *16, allocatable :: svec(:),yvec(:),wtmp(:)
+      complex *16 ima
+      data ima/(0.0d0,1.0d0)/
+
+
+      allocate(vmat(npts,numit+1),hmat(numit,numit))
+      allocate(cs(numit),sn(numit))
+      allocate(wtmp(npts),svec(numit+1),yvec(numit+1))
+
+
+      done = 1
+      pi = atan(done)*4
+
+c
+c
+c     start gmres code here
+c
+c     NOTE: matrix equation should be of the form (z*I + K)x = y
+c       the identity scaling (z) is defined via zid below,
+c       and K represents the action of the principal value 
+c       part of the matvec
+c
+      zid = -1.0d0/4.0d0 -(-1)**(ifinout+1)*zpars(2)*ima/2
+
+c
+c
+
+      niter=0
+
+c
+c      compute norm of right hand side and initialize v
+c 
+      rb = 0
+
+      do i=1,numit
+        cs(i) = 0
+        sn(i) = 0
+      enddo
+
+
+c
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:rb)
+      do i=1,npts
+        rb = rb + abs(rhscoefs(i))**2
+      enddo
+C$OMP END PARALLEL DO      
+      rb = sqrt(rb)
+
+C$OMP PARALLEL DO DEFAULT(SHARED)
+      do i=1,npts
+        vmat(i,1) = rhscoefs(i)/rb
+      enddo
+C$OMP END PARALLEL DO      
+
+      svec(1) = rb
+
+      do it=1,numit
+        it1 = it + 1
+
+c
+c        NOTE:
+c        replace this routine by appropriate layer potential
+c        evaluation routine  
+c
+
+
+        call lpcomp_galerkin_neu_helm2d(nch,k,ixys,npts,
+     1    srcvals,eps,zpars,nnz,row_ptr,col_ind,iquad,
+     2    nquad,wnearcoefs,vmat(1,it),nover,npts_over,ixyso,
+     3    srcover,wover,wtmp,solnikcoefs)
+
+        do l=1,it
+          ztmp = 0
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:ztmp)          
+          do j=1,npts
+            ztmp = ztmp + wtmp(j)*conjg(vmat(j,l))
+          enddo
+C$OMP END PARALLEL DO          
+          hmat(l,it) = ztmp
+
+C$OMP PARALLEL DO DEFAULT(SHARED) 
+          do j=1,npts
+            wtmp(j) = wtmp(j)-hmat(l,it)*vmat(j,l)
+          enddo
+C$OMP END PARALLEL DO          
+        enddo
+          
+        hmat(it,it) = hmat(it,it)+zid
+        wnrm2 = 0
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:wnrm2)        
+        do j=1,npts
+          wnrm2 = wnrm2 + abs(wtmp(j))**2
+        enddo
+C$OMP END PARALLEL DO        
+        wnrm2 = sqrt(wnrm2)
+
+C$OMP PARALLEL DO DEFAULT(SHARED) 
+        do j=1,npts
+          vmat(j,it1) = wtmp(j)/wnrm2
+        enddo
+C$OMP END PARALLEL DO        
+
+        do l=1,it-1
+          temp = cs(l)*hmat(l,it)+conjg(sn(l))*hmat(l+1,it)
+          hmat(l+1,it) = -sn(l)*hmat(l,it)+cs(l)*hmat(l+1,it)
+          hmat(l,it) = temp
+        enddo
+
+        ztmp = wnrm2
+
+        call zrotmat_gmres2d(hmat(it,it),ztmp,cs(it),sn(it))
+          
+        hmat(it,it) = cs(it)*hmat(it,it)+conjg(sn(it))*wnrm2
+        svec(it1) = -sn(it)*svec(it)
+        svec(it) = cs(it)*svec(it)
+        rmyerr = abs(svec(it1))/rb
+        errs(it) = rmyerr
+        print *, "iter=",it,errs(it)
+
+        if(rmyerr.le.eps_gmres.or.it.eq.numit) then
+
+c
+c            solve the linear system corresponding to
+c            upper triangular part of hmat to obtain yvec
+c
+c            y = triu(H(1:it,1:it))\s(1:it);
+c
+          do j=1,it
+            iind = it-j+1
+            yvec(iind) = svec(iind)
+            do l=iind+1,it
+              yvec(iind) = yvec(iind) - hmat(iind,l)*yvec(l)
+            enddo
+            yvec(iind) = yvec(iind)/hmat(iind,iind)
+          enddo
+
+
+
+c
+c          estimate x
+c
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j)
+          do j=1,npts
+            solncoefs(j) = 0
+            do i=1,it
+              solncoefs(j) = solncoefs(j) + yvec(i)*vmat(j,i)
+            enddo
+          enddo
+C$OMP END PARALLEL DO          
+
+
+          rres = 0
+C$OMP PARALLEL DO DEFAULT(SHARED)          
+          do i=1,npts
+            wtmp(i) = 0
+          enddo
+C$OMP END PARALLEL DO          
+c
+c        NOTE:
+c        replace this routine by appropriate layer potential
+c        evaluation routine  
+c
+
+        call lpcomp_galerkin_neu_helm2d(nch,k,ixys,npts,
+     1    srcvals,eps,zpars,nnz,row_ptr,col_ind,iquad,
+     2    nquad,wnearcoefs,solncoefs,nover,npts_over,ixyso,
+     3    srcover,wover,wtmp,solnikcoefs)
 
 C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:rres)            
           do i=1,npts
