@@ -358,16 +358,20 @@ c
       integer nch1,k1,npts1,nch2,k2,npts2,k3,nch3
       complex *16 solncoefs1(npts1),solncoefs2(npts2)
       real *8 erra
-      integer, allocatable :: adjs1(:,:),adjs2(:,:),adjs3(:,:)
-      real *8, allocatable :: srcinfo1(:,:),srcinfo2(:,:),srcinfo3(:,:)
+      integer, allocatable :: adjs1(:,:),adjs2(:,:),adjs3(:,:),
+     1  adjs22(:,:)
+      real *8, allocatable :: srcinfo1(:,:),srcinfo2(:,:),srcinfo3(:,:),
+     1   srcinfo22(:,:)
       real *8, allocatable :: srccoefs1(:,:),srccoefs2(:,:),
-     1  srccoefs3(:,:)
-      real *8, allocatable :: ts1(:),ts2(:),ts3(:)
-      real *8, allocatable :: qwts1(:),qwts2(:),qwts3(:)
-      integer, allocatable :: norders1(:),norders2(:),norders3(:)
-      integer, allocatable :: iptype1(:),iptype2(:),iptype3(:)
-      integer, allocatable :: ixys1(:),ixys2(:),ixys3(:)
-      real *8, allocatable :: srcrad1(:),srcrad2(:)
+     1  srccoefs3(:,:),srccoefs22(:,:)
+      real *8, allocatable :: ts1(:),ts2(:),ts3(:),ts22(:)
+      real *8, allocatable :: qwts1(:),qwts2(:),qwts3(:),qwts22(:)
+      integer, allocatable :: norders1(:),norders2(:),norders3(:),
+     1   norders22(:)
+      integer, allocatable :: iptype1(:),iptype2(:),iptype3(:),
+     1   iptype22(:)
+      integer, allocatable :: ixys1(:),ixys2(:),ixys3(:),ixys22(:)
+      real *8, allocatable :: srcrad1(:),srcrad22(:)
 
       real *8, allocatable :: ts_interp1(:),ts_interp2(:)
       integer, allocatable :: ich_interp1(:),ich_interp2(:)
@@ -402,10 +406,19 @@ c
       allocate(ixys1(nch1+1),srcrad1(npts1))
 
 
-      allocate(adjs2(2,nch2),srcinfo2(8,npts2),srccoefs2(6,npts2))
-      allocate(ts2(npts2),qwts2(npts2),norders2(nch2),iptype2(nch2))
-      allocate(ixys2(nch2+1),srcrad2(npts2))
 
+      allocate(adjs2(2,nch2),srcinfo2(8,npts2),srccoefs2(6,npts2))
+      allocate(ts2(npts2),qwts2(npts2),
+     1    norders2(nch2),iptype2(nch2))
+      allocate(ixys2(nch2+1))
+
+      k22 = 30
+      npts22 = nch2*k22
+
+      allocate(adjs22(2,nch2),srcinfo22(8,npts22),srccoefs22(6,npts22))
+      allocate(ts22(npts22),qwts22(npts22),
+     1    norders22(nch2),iptype22(nch2))
+      allocate(ixys22(nch2+1),srcrad22(npts22))
 
       allocate(adjs3(2,nch3),srcinfo3(8,npts3),srccoefs3(6,npts3))
       allocate(ts3(npts3),qwts3(npts3),norders3(nch3),iptype3(nch3))
@@ -426,6 +439,12 @@ c
      1  srcinfo2,srccoefs2,ts2,qwts2,norders2,iptype2,ixys2,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
 
+      
+      call get_funcurv_geom_uni(a,b,nch2,k22,npts22,adjs22,
+     1  srcinfo22,srccoefs22,ts22,qwts22,norders22,iptype22,ixys22,
+     1  circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+
       call get_funcurv_geom_uni(a,b,nch3,k3,npts3,adjs3,
      1  srcinfo3,srccoefs3,ts3,qwts3,norders3,iptype3,ixys3,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
@@ -433,31 +452,32 @@ c
       do i=1,npts1
         srcrad1(i) = 0
       enddo
-      do i=1,npts2
-        srcrad2(i) = 0
+
+      do i=1,npts22
+        srcrad22(i) = 0
       enddo
+
 
 cc      call prin2('srccoefs1=*',srccoefs1,6*npts1)
       
       
-      call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,npts1,
-     1  srccoefs1,srcinfo1,srcrad1,8,npts3,srcinfo3,ich_interp1,
-     2  ts_interp1,dist1,timeinfo,ier)
+      call findnearchunktarg_id_ts_brute(nch1,norders1,ixys1,iptype1,
+     1  npts1,srccoefs1,srcinfo1,8,npts3,srcinfo3,ich_interp1,
+     2  ts_interp1,dist1)
       
-      call findnearchunktarg_id_ts(nch2,norders2,ixys2,iptype2,npts2,
-     1  srccoefs2,srcinfo2,srcrad2,8,npts3,srcinfo3,ich_interp2,
-     2  ts_interp2,dist2,timeinfo,ier)
+      call findnearchunktarg_id_ts_brute(nch2,norders22,ixys22,iptype22,
+     1  npts22,srccoefs22,srcinfo22,8,npts3,srcinfo3,ich_interp2,
+     2  ts_interp2,dist2)
 
 c
 c  
 c
       allocate(ich_interp12(npts2),ts_interp12(npts2),dist12(npts2))
-      call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,npts1,
-     1  srccoefs1,srcinfo1,srcrad1,8,npts2,srcinfo2,ich_interp12,
-     2  ts_interp12,dist12,timeinfo,ier)
+      call findnearchunktarg_id_ts_brute(nch1,norders1,ixys1,iptype1,
+     1  npts1,srccoefs1,srcinfo1,8,npts2,srcinfo2,ich_interp12,
+     2  ts_interp12,dist12)
       allocate(soln12(npts2),soln12coefs(npts2))
       
-
       call interp_dens(nch1,norders1,ixys1,iptype1,npts1,
      1  solncoefs1,npts2,ts_interp12,ich_interp12,soln12)
 c
@@ -478,7 +498,7 @@ c
 
       call interp_dens(nch1,norders1,ixys1,iptype1,npts1,
      1  solncoefs1,npts3,ts_interp1,ich_interp1,soln1)
-
+c
       call interp_dens(nch2,norders2,ixys2,iptype2,npts2,
      1  solncoefs2,npts3,ts_interp2,ich_interp2,soln2)
       

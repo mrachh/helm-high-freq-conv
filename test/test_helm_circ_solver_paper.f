@@ -82,7 +82,11 @@ c
            print *, "here1"
 
         
-
+           print *, "nchref=",nchref
+           print *, "kref=",kref
+           print *, "nch1=",nch1
+           print *, "kerr=",kerr
+           print *, "ncherr=",ncherr
            call get_circ_dens_error(dpars,nchref,kref,nptsrefg,
      1       solnrefg,nch1,k1,npts1,solncoefsg,kerr,ncherr,
      1       err_dens(ippw,ik),err_q(ippw,ik))

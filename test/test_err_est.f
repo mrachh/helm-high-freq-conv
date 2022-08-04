@@ -48,9 +48,9 @@ c
 c  nover is the oversampled source order
 c
 
-      k = 22
-      kg = 16
-      nover = 30
+      k = 20
+      kg = 1
+      nover = 5
       itype = 2
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
       call legeexps(itype,k,ts,umat,vmat,wts)
@@ -59,9 +59,9 @@ c
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
 
-      nch = 10
-      nchg = 8
-      ncho = 12
+      nch = 40
+      nchg = 20
+      ncho = 80
       npts = nch*k
       nptsg = nchg*kg
       npts_over = ncho*nover
@@ -146,8 +146,9 @@ c
       enddo
 
       call get_circ_dens_error(dpars,nch,k,npts,sigmacoefs,
-     1  nchg,kg,nptsg,sigmacoefsg,nover,ncho,erra)
+     1  nchg,kg,nptsg,sigmacoefsg,nover,ncho,erra,errq)
       print *, "erra=",erra
+      print *, "errq=",errq
 
        
 
