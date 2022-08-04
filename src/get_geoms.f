@@ -294,6 +294,163 @@ c
 c
         return
         end
+
+c
+c
+c
+c
+      subroutine interp_dens(nch,norders,ixys,iptype,npts,
+     1  solncoefs,ninterp,ts_interp,ich_interp,soln_interp)
+c
+c  given coefs of a density defined on a grid, and a set
+c  of points identified through their local t coordinates
+c  and chunk id, compute interpolated density
+c
+c
+
+      implicit real *8 (a-h,o-z)
+      integer nch,norders(nch),ixys(nch+1),iptype(nch),npts
+      complex *16 solncoefs(npts),soln_interp(ninterp)
+
+      real *8, allocatable :: pols(:)
+
+      kmax = maxval(norders(1:nch))
+      allocate(pols(kmax))
+
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(pols,i,ich,istart,j)
+      do i=1,ninterp
+        ich = ich_interp(i)
+        istart = ixys(ich)
+        do j=1,norders(ich)
+          pols(j) = 0
+        enddo
+        if(iptype(ich).eq.1) then 
+          call legepols(ts_interp(i),norders(ich)-1,pols)
+        endif
+        soln_interp(i) = 0
+        do j=1,norders(ich)
+          soln_interp(i) = soln_interp(i) +
+     1       solncoefs(istart+j-1)*pols(j)
+        enddo
+      enddo
+C$OMP END PARALLEL DO
+
+      
+      return
+      end
+
+
+
+      subroutine get_circ_dens_error(dpars,nch1,k1,npts1,solncoefs1,
+     1   nch2,k2,npts2,solncoefs2,k3,nch3,erra)
+c
+c   Given two densities defined on two grids, and a third
+c   reference grid to compute the error, evalute
+c   the L2 error in the density
+c
+      implicit real *8 (a-h,o-z)
+      integer nch1,k1,npts1,nch2,k2,npts2,k3,nch3
+      complex *16 solncoefs1(npts1),solncoefs2(npts2)
+      real *8 erra
+      integer, allocatable :: adjs1(:,:),adjs2(:,:),adjs3(:,:)
+      real *8, allocatable :: srcinfo1(:,:),srcinfo2(:,:),srcinfo3(:,:)
+      real *8, allocatable :: srccoefs1(:,:),srccoefs2(:,:),
+     1  srccoefs3(:,:)
+      real *8, allocatable :: ts1(:),ts2(:),ts3(:)
+      real *8, allocatable :: qwts1(:),qwts2(:),qwts3(:)
+      integer, allocatable :: norders1(:),norders2(:),norders3(:)
+      integer, allocatable :: iptype1(:),iptype2(:),iptype3(:)
+      integer, allocatable :: ixys1(:),ixys2(:),ixys3(:)
+      real *8, allocatable :: srcrad1(:),srcrad2(:)
+
+      real *8, allocatable :: ts_interp1(:),ts_interp2(:)
+      integer, allocatable :: ich_interp1(:),ich_interp2(:)
+      real *8, allocatable :: dist1(:),dist2(:)
+
+      complex *16, allocatable :: soln1(:),soln2(:)
+
+      real *8 dpars(2),timeinfo(3)
+      complex *16 zpars
+      integer ipars
+
+      external circ_geom
+
+      done = 1.0d0
+      pi = atan(done)*4
+
+      npts3 = k3*nch3
+      allocate(ts_interp1(npts3),ich_interp1(npts3))
+      allocate(ts_interp2(npts3),ich_interp2(npts3))
+      allocate(dist1(npts3),dist2(npts3))
+      allocate(soln1(npts3),soln2(npts3))
+
+
+      allocate(adjs1(2,nch1),srcinfo1(8,npts1),srccoefs1(6,npts1))
+      allocate(ts1(npts1),qwts1(npts1),norders1(nch1),iptype1(nch1))
+      allocate(ixys1(nch1+1),srcrad1(nch1))
+
+
+      allocate(adjs2(2,nch2),srcinfo2(8,npts2),srccoefs2(6,npts2))
+      allocate(ts2(npts2),qwts2(npts2),norders2(nch2),iptype2(nch2))
+      allocate(ixys2(nch2+1),srcrad2(nch2))
+
+
+      allocate(adjs3(2,nch3),srcinfo3(8,npts3),srccoefs3(6,npts3))
+      allocate(ts3(npts3),qwts3(npts3),norders3(nch3),iptype3(nch3))
+      allocate(ixys3(nch3+1))
+      
+      ndd_curv = 2
+      ndz_curv = 0
+      ndi_curv = 0
+
+      a = 0.0d0
+      b = 2*pi
+      call get_funcurv_geom_uni(a,b,nch1,k1,npts1,adjs1,
+     1  srcinfo1,srccoefs1,ts1,qwts1,norders1,iptype1,ixys1,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+      
+      call get_funcurv_geom_uni(a,b,nch2,k2,npts2,adjs2,
+     1  srcinfo2,srccoefs2,ts2,qwts2,norders2,iptype2,ixys2,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+
+      call get_funcurv_geom_uni(a,b,nch3,k3,npts3,adjs3,
+     1  srcinfo3,srccoefs3,ts3,qwts3,norders3,iptype3,ixys3,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+      
+      do i=1,nch1
+        srcrad1(i) = 0
+      enddo
+      do i=1,nch2
+        srcrad2(i) = 0
+      enddo
+      
+      call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,npts1,
+     1  srccoefs1,srcinfo1,srcrad1,8,npts3,srcinfo3,ich_interp1,
+     2  ts_interp1,dist1,timeinfo,ier)
+      
+      call findnearchunktarg_id_ts(nch2,norders2,ixys2,iptype2,npts2,
+     1  srccoefs2,srcinfo2,srcrad2,8,npts3,srcinfo3,ich_interp2,
+     2  ts_interp2,dist2,timeinfo,ier)
+
+      call interp_dens(nch1,norders1,ixys1,iptype1,npts1,
+     1  solncoefs1,npts3,ts_interp1,ich_interp1,soln1)
+
+      call interp_dens(nch2,norders2,ixys2,iptype2,npts2,
+     1  solncoefs2,npts3,ts_interp2,ich_interp2,soln2)
+      
+      erra = 0
+      ra = 0
+      do i=1,npts3
+        write(35,*) ts3(i),real(soln1(i)),imag(soln1(i))
+        write(36,*) ts3(i),real(soln2(i)),imag(soln2(i))
+        erra = erra + abs(soln1(i)-soln2(i))**2*qwts3(i)
+        ra = ra + abs(soln1(i))**2*qwts3(i)
+      enddo
+      erra = sqrt(erra/ra)
+
+
+      return
+      end
 c
 c
 c
