@@ -311,6 +311,8 @@ c
       implicit real *8 (a-h,o-z)
       integer nch,norders(nch),ixys(nch+1),iptype(nch),npts
       complex *16 solncoefs(npts),soln_interp(ninterp)
+      integer ich_interp(ninterp)
+      real *8 ts_interp(ninterp)
 
       real *8, allocatable :: pols(:)
 
@@ -387,12 +389,12 @@ c
 
       allocate(adjs1(2,nch1),srcinfo1(8,npts1),srccoefs1(6,npts1))
       allocate(ts1(npts1),qwts1(npts1),norders1(nch1),iptype1(nch1))
-      allocate(ixys1(nch1+1),srcrad1(nch1))
+      allocate(ixys1(nch1+1),srcrad1(npts1))
 
 
       allocate(adjs2(2,nch2),srcinfo2(8,npts2),srccoefs2(6,npts2))
       allocate(ts2(npts2),qwts2(npts2),norders2(nch2),iptype2(nch2))
-      allocate(ixys2(nch2+1),srcrad2(nch2))
+      allocate(ixys2(nch2+1),srcrad2(npts2))
 
 
       allocate(adjs3(2,nch3),srcinfo3(8,npts3),srccoefs3(6,npts3))
@@ -405,6 +407,7 @@ c
 
       a = 0.0d0
       b = 2*pi
+      call prin2('dpars=*',dpars,2)
       call get_funcurv_geom_uni(a,b,nch1,k1,npts1,adjs1,
      1  srcinfo1,srccoefs1,ts1,qwts1,norders1,iptype1,ixys1,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
@@ -417,12 +420,15 @@ c
      1  srcinfo3,srccoefs3,ts3,qwts3,norders3,iptype3,ixys3,circ_geom,
      2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
       
-      do i=1,nch1
+      do i=1,npts1
         srcrad1(i) = 0
       enddo
-      do i=1,nch2
+      do i=1,npts2
         srcrad2(i) = 0
       enddo
+
+cc      call prin2('srccoefs1=*',srccoefs1,6*npts1)
+      
       
       call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,npts1,
      1  srccoefs1,srcinfo1,srcrad1,8,npts3,srcinfo3,ich_interp1,
@@ -441,8 +447,6 @@ c
       erra = 0
       ra = 0
       do i=1,npts3
-        write(35,*) ts3(i),real(soln1(i)),imag(soln1(i))
-        write(36,*) ts3(i),real(soln2(i)),imag(soln2(i))
         erra = erra + abs(soln1(i)-soln2(i))**2*qwts3(i)
         ra = ra + abs(soln1(i))**2*qwts3(i)
       enddo

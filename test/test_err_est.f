@@ -127,19 +127,18 @@ c
           ipt = (ich-1)*k + j
           tuse = ts1(ipt)
           sigma(ipt) = exp(ima*(imode+0.0d0)*tuse)
-          write(33,*) tuse,real(sigma(ipt)),imag(sigma(ipt))
         enddo
         istart = (ich-1)*k+1
 
         call dgemm('n','t',2,k,k,alpha,sigma(istart),
      1     2,umat,k,beta,sigmacoefs(istart),2)
       enddo
+      
       do ich=1,nchg
         do j=1,kg
           ipt = (ich-1)*kg + j
           tuse = ts1g(ipt) 
           sigmag(ipt) = exp(ima*(imode+0.0d0)*tuse)
-          write(34,*) tuse,real(sigmag(ipt)),imag(sigmag(ipt))
         enddo
         istart = (ich-1)*kg + 1
         call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),
