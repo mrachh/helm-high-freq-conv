@@ -1,9 +1,9 @@
       implicit real *8 (a-h,o-z)
       complex *16, allocatable :: solnrefg(:),solnref2g(:),solncoefsg(:)
       
-      real *8, allocatable :: err_est(:,:),err_dens(:,:),cq(:,:)
+      real *8, allocatable :: err_est(:,:),err_dens(:,:),err_q(:,:)
       real *8, allocatable :: err_est_ref(:),err_est_ref2(:)
-      real *8, allocatable :: err_dens_ref(:)
+      real *8, allocatable :: err_dens_ref(:),err_q_ref(:)
       integer, allocatable :: niter_ref(:),niter_analytic_ref(:)
       integer, allocatable :: niter_ref2(:),niter_analytic_ref2(:)
       integer, allocatable :: niter(:,:),niter_analytic(:,:)
@@ -21,19 +21,25 @@
       kref = k
       kref2 = k-4
       nkd = 2
-      nppw = 20
+      nppw = 3
 
       kerr = 32
       allocate(err_est_ref(nkd),err_est_ref2(nkd),err_dens_ref(nkd))
       allocate(niter_ref(nkd),niter_ref2(nkd))
       allocate(niter_analytic_ref(nkd),niter_analytic_ref2(nkd))
+      allocate(err_q_ref(nkd))
 c
-c  reference solutions tested, need (I-P_{N}) evaluator
-c    refactor existing code in some way and test, and then write
+c  reference solutions tested, 
+c    and then write
 c    nppw error estimator
 c
 
+      allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
+      allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
+      open(unit=33,file='circ_data/circ_res.txt',access='append')
       do ik=1,nkd
+        print *, "ik=",ik
+        read *, i
         zk = 10.0d0*2**(ik-1) + 0.0d0
         nchref = ceiling(abs(zk))*4
         ncherr = ceiling(abs(zk))*8
@@ -58,7 +64,37 @@ c
 
         call get_circ_dens_error(dpars,nchref,kref,nptsrefg,
      1    solnrefg,nchref2,kref2,nptsref2g,solnref2g,kerr,ncherr,
-     1    err_dens_ref(ik))
+     1    err_dens_ref(ik),err_q_ref(ik))
+
+        do ippw=1,nppw
+          print *, ippw
+          read *, i
+          rexp = (ippw-1.0d0)/(nppw-1.0d0)
+          dppw = 2*abs(zk)**rexp
+          nch1 = ceiling(abs(zk)*dppw)
+          k1 = 1
+          npts1 = nch1*k1
+          allocate(solncoefsg(npts1))
+
+           call get_circ_sols(dpars,zk,k,k1,nover,nch1,npts1,
+     1       solncoefsg,err_est(ippw,ik),niter_analytic(ippw,ik),
+     1       niter(ippw,ik))
+           print *, "here1"
+
+        
+
+           call get_circ_dens_error(dpars,nchref,kref,nptsrefg,
+     1       solnrefg,nch1,k1,npts1,solncoefsg,kerr,ncherr,
+     1       err_dens(ippw,ik),err_q(ippw,ik))
+           print *, "here2"
+           drat = (nch1+0.0d0)/abs(zk)
+       write(33,'(2x,e11.5,2x,i4,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
+     1     real(zk),
+     1     nch1,drat,dppw,err_est(ippw,ik),
+     1     niter_analytic(ippw,ik),niter(ippw,ik),err_dens(ippw,ik),
+     2     err_q(ippw,ik)
+          deallocate(solncoefsg)
+        enddo
         deallocate(solnrefg,solnref2g)
       enddo
       call prin2('err_est=*',err_est_ref,nkd)
@@ -68,6 +104,8 @@ c
       call prinf('niter_ref2=*',niter_ref2,nkd)
       call prinf('niter_analytic_ref=*',niter_analytic_ref,nkd)
       call prinf('niter_analytic_ref2=*',niter_analytic_ref2,nkd)
+      call prin2('err_q_ref=*',err_q_ref,nkd)
+      close(33)
       
 
 
