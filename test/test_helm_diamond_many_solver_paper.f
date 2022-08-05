@@ -37,10 +37,14 @@
 
 
       
-      k = 22
-      nover = 30
+c      k = 22
+c      nover = 30
+c      kref = k
+c      kref2 = k-4
+      k = 4
+      nover = 10
       kref = k
-      kref2 = k-4
+      kref2 = k-2
       nkd = 2
       nppw = 3
 
@@ -61,13 +65,14 @@ c
       do ik=1,nkd
         print *, "ik=",ik
         zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
+        zk = zk/4
         nchref0 = ceiling(0.4d0*4*abs(zk)/sqrt(2.0d0))
         ncherr0 = 2*nchref0
         nchref20 = nchref0-2
 
-        nchref = ncomp*nchref0
-        ncherr = ncomp*ncherr
-        nchref2 = ncomp*nchref20 
+        nchref = ncomp*nchref0*4
+        ncherr = ncomp*ncherr*4
+        nchref2 = ncomp*nchref20*4 
 
         nptsrefg = nchref*kref
         nptsref2g = nchref2*kref2
@@ -100,7 +105,7 @@ c
           rexp = (ippw-1.0d0)/(nppw-1.0d0)*0.5d0
           dppw = 2*abs(zk)**rexp
           nch10 = ceiling(0.4d0*dppw*abs(zk)/sqrt(2.0d0))
-          nch1 = ncomp*nch10
+          nch1 = ncomp*nch10*4
           k1 = 1
           npts1 = nch1*k1
           allocate(solncoefsg(npts1))
@@ -211,7 +216,7 @@ c
 
       allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
-
+      nch = ncomp*nch0*4
       print *, "nch=",nch
       print *, "k=",k
       print *, "kg=",kg
@@ -240,6 +245,8 @@ c
       ndd_curv = 2
       ndz_curv = 0
       ndi_curv = 0
+      
+      
       call get_diamond_many(nch0,ncomp,rsc,shifts,nch,k,
      1  npts,adjs,srcinfo,srccoefs,qwts,norders,iptype,ixys)
       print *, "nch=",nch
@@ -335,16 +342,18 @@ C$       t2 = omp_get_wtime()
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
       iquadtype = 1
-      eps = 0.51d-12
+      eps = 0.51d-9
+      eps_gmres = 0.51d-9
 
       niter = 0
       numit = max(ceiling(10*abs(zk)),200)
       allocate(errs(numit+1))
       ifinout = 1
+      print *, "starting gmres"
       call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
      1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
-     3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
+     3  wover,numit,ifinout,sigmacoefsg,eps_gmres,niter,errs,rres,
      4  solncoefsg)
       niter1 = niter
 
@@ -369,7 +378,7 @@ C$       t2 = omp_get_wtime()
       call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
      1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
-     3  wover,numit,ifinout,sigmacoefspwg,eps,niter,errs,rres,
+     3  wover,numit,ifinout,sigmacoefspwg,eps_gmres,niter,errs,rres,
      4  solncoefsg)
       niter2 = niter
       print *, "erra=",erra

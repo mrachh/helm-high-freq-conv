@@ -585,21 +585,21 @@ c
       done = 1.0d0
       pi = atan(done)*4
 
-      nch3 = nch30*ncomp
+      nch3 = nch30*ncomp*4
       npts3 = k3*nch3
       allocate(ts_interp1(npts3),ich_interp1(npts3))
       allocate(ts_interp2(npts3),ich_interp2(npts3))
       allocate(dist1(npts3),dist2(npts3))
       allocate(soln1(npts3),soln2(npts3))
 
-      nch1 = nch10*ncomp
+      nch1 = nch10*ncomp*4
       npts1 = nch1*k1
 
       allocate(adjs1(2,nch1),srcinfo1(8,npts1),srccoefs1(6,npts1))
       allocate(ts1(npts1),qwts1(npts1),norders1(nch1),iptype1(nch1))
       allocate(ixys1(nch1+1),srcrad1(npts1))
 
-      nch2 = nch20*ncomp
+      nch2 = nch20*ncomp*4
       npts2 = nch2*k2
 
       allocate(adjs2(2,nch2),srcinfo2(8,npts2),srccoefs2(6,npts2))
