@@ -36,7 +36,7 @@ c
 
       allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
       allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
-      open(unit=33,file='circ_data/circ_res.txt',access='append')
+      open(unit=33,file='circ_neu_data/circ_res.txt',access='append')
       do ik=1,nkd
         print *, "ik=",ik
         zk = 10.0d0*2**(ik-1) + 0.0d0
@@ -130,9 +130,10 @@ c
       complex *16, allocatable :: sigmag(:),sigmacoefsg(:)
       complex *16, allocatable :: sigmapwg(:),sigmacoefspwg(:)
       complex *16 solncoefsg(nptsg)
-      complex *16, allocatable :: solng(:)
+      complex *16, allocatable :: solng(:),solnikg(:)
+      complex *16, allocatable :: solnikcoefsg(:)
       integer, allocatable :: row_ptrg(:),col_indg(:),iquadg(:)
-      complex *16, allocatable :: wnearg(:),wnearcoefsg(:)
+      complex *16, allocatable :: wnearg(:,:),wnearcoefsg(:,:)
       integer, allocatable :: ich_id(:)
       real *8, allocatable :: ts_pts(:)
       integer, allocatable :: norders(:),ixys(:),iptype(:),ixysg(:)
@@ -158,7 +159,6 @@ c
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
-      zpars(3) = 1.0d0
 
       alpha = 1.0d0
       beta = 0.0d0
@@ -232,7 +232,7 @@ c
       print *, "nptsg=",nptsg
       allocate(sigmag(nptsg),sigmacoefsg(nptsg))
       allocate(sigmacoefspwg(nptsg),sigmapwg(nptsg))
-      allocate(solng(nptsg))
+      allocate(solng(nptsg),solnikg(nptsg),solnikcoefsg(nptsg))
 
       xyin(1) = 0.1d0
       xyin(2) = -0.33d0
@@ -246,11 +246,12 @@ c
       do ich=1,nch
         do j=1,kg
           ipt = (ich-1)*kg + j
-          call h2d_slp(srcinfog(1,ipt),2,xyin,ndd,dpars,1,zk,ndi,
+          call h2d_sprime(xyin,8,srcinfog(1,ipt),ndd,dpars,1,zk,ndi,
      1       ipars,sigmag(ipt))
           zkuse = ceiling(real(zk)) - 1.0d0
           sigmapwg(ipt) = exp(ima*zkuse*ts1g(ipt))
           solncoefsg(ipt) = 0.0d0
+          solnikcoefsg(ipt) = 0.0d0
         enddo
         istart = (ich-1)*kg + 1
         call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),
@@ -271,8 +272,8 @@ c
       nnzg = 3*kg*nch
       nquadg = nnzg*kg
 
-      allocate(row_ptrg(nptsg+1),col_indg(nnzg),wnearg(nquadg))
-      allocate(wnearcoefsg(nquadg))
+      allocate(row_ptrg(nptsg+1),col_indg(nnzg),wnearg(nquadg,4))
+      allocate(wnearcoefsg(nquadg,4))
 
       print *, "starting trid quad"
       print *, "nch=",nch
@@ -285,7 +286,7 @@ c
       print *, "nptsg=",nptsg
       call cpu_time(t1)
 C$       t1 = omp_get_wtime()     
-      call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,adjs,
+      call get_helm_neu_trid_quad_corr(zk,nch,k,kg,npts,nptsg,adjs,
      1   srcinfo,srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,
      2   wnearg,wnearcoefsg)
       call cpu_time(t2)
@@ -304,11 +305,11 @@ C$       t2 = omp_get_wtime()
       numit = max(ceiling(10*abs(zk)),200)
       allocate(errs(numit+1))
       ifinout = 1
-      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
+      call helm_comb_neu_galerkin_solver2d(nch,kg,ixysg,nptsg,
      1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
      3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
-     4  solncoefsg)
+     4  solncoefsg,solnikcoefsg)
       niter1 = niter
 
       call h2d_slp(xyout,2,xyin,ndd,dpars,1,zk,ndi,ipars,pottargex)
@@ -316,24 +317,29 @@ C$       t2 = omp_get_wtime()
         istart = (i-1)*kg+1
         call dgemm('n','t',2,kg,kg,alpha,solncoefsg(istart),
      1     2,vmatg,kg,beta,solng(istart),2)
+        call dgemm('n','t',2,kg,kg,alpha,solnikcoefsg(istart),
+     1     2,vmatg,kg,beta,solnikg(istart),2)
       enddo
 
       pottarg = 0
       do i=1,nptsg
-        call h2d_comb(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
+        call h2d_slp(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
      1     ndi,ipars,ztmp)
-        pottarg = pottarg + ztmp*qwtsg(i)*solng(i)
+        pottarg = pottarg + ztmp*qwtsg(i)*solng(i)*ima*zpars(2)
+        call h2d_dlp(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
+     1     ndi,ipars,ztmp)
+        pottarg = pottarg + ztmp*qwtsg(i)*solnikg(i)
       enddo
       call prin2_long('pottarg=*',pottarg,2)
       call prin2_long('pottargex=*',pottargex,2)
       erra = abs(pottarg-pottargex)/abs(pottargex)
       err_est = erra 
       
-      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
+      call helm_comb_neu_galerkin_solver2d(nch,kg,ixysg,nptsg,
      1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
      3  wover,numit,ifinout,sigmacoefspwg,eps,niter,errs,rres,
-     4  solncoefsg)
+     4  solncoefsg,solnikcoefsg)
       niter2 = niter
       print *, "erra=",erra
 
