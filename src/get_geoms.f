@@ -461,21 +461,25 @@ c
 cc      call prin2('srccoefs1=*',srccoefs1,6*npts1)
       
       
-      call findnearchunktarg_id_ts_brute(nch1,norders1,ixys1,iptype1,
-     1  npts1,srccoefs1,srcinfo1,8,npts3,srcinfo3,ich_interp1,
-     2  ts_interp1,dist1)
+      call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,
+     1  npts1,srccoefs1,srcinfo1,srcrad1,8,npts3,srcinfo3,ich_interp1,
+     2  ts_interp1,dist1,timeinfo,ier)
       
-      call findnearchunktarg_id_ts_brute(nch2,norders22,ixys22,iptype22,
-     1  npts22,srccoefs22,srcinfo22,8,npts3,srcinfo3,ich_interp2,
-     2  ts_interp2,dist2)
+      call findnearchunktarg_id_ts(nch2,norders22,ixys22,iptype22,
+     1  npts22,srccoefs22,srcinfo22,srcrad22,8,npts3,srcinfo3,
+     2  ich_interp2,ts_interp2,dist2,timeinfo,ier)
 
 c
 c  
 c
       allocate(ich_interp12(npts2),ts_interp12(npts2),dist12(npts2))
-      call findnearchunktarg_id_ts_brute(nch1,norders1,ixys1,iptype1,
-     1  npts1,srccoefs1,srcinfo1,8,npts2,srcinfo2,ich_interp12,
-     2  ts_interp12,dist12)
+c      call findnearchunktarg_id_ts_brute(nch1,norders1,ixys1,iptype1,
+c     1  npts1,srccoefs1,srcinfo1,8,npts2,srcinfo2,ich_interp12,
+c     2  ts_interp12,dist12)
+      
+      call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,
+     1  npts1,srccoefs1,srcinfo1,srcrad1,8,npts2,srcinfo2,ich_interp12,
+     2  ts_interp12,dist12,timeinfo,ier)
       allocate(soln12(npts2),soln12coefs(npts2))
       
       call interp_dens(nch1,norders1,ixys1,iptype1,npts1,
@@ -524,6 +528,198 @@ c
 
       return
       end
+
+
+
+
+
+      subroutine get_diamond_many_dens_error(ncomp,shifts,rsc,
+     1   nch10,nch1,k1,npts1,solncoefs1,nch20,nch2,k2,npts2,
+     1   solncoefs2,k3,nch30,nch3,erra,errq)
+c
+c   Given two densities defined on two grids, and a third
+c   reference grid to compute the error, evalute
+c   the L2 error in the density
+c
+c   and errq is the optimality factor, i.e. project solncoefs1, 
+c   onto the basis of solncoefs2 and then evaluate the error
+c   between solncoefs1 and the projected version of solncoefs1
+c
+      implicit real *8 (a-h,o-z)
+      integer nch1,k1,npts1,nch2,k2,npts2,k3,nch3
+      complex *16 solncoefs1(npts1),solncoefs2(npts2)
+      real *8 erra
+      integer, allocatable :: adjs1(:,:),adjs2(:,:),adjs3(:,:),
+     1  adjs22(:,:)
+      real *8, allocatable :: srcinfo1(:,:),srcinfo2(:,:),srcinfo3(:,:),
+     1   srcinfo22(:,:)
+      real *8, allocatable :: srccoefs1(:,:),srccoefs2(:,:),
+     1  srccoefs3(:,:),srccoefs22(:,:)
+      real *8, allocatable :: ts1(:),ts2(:),ts3(:),ts22(:)
+      real *8, allocatable :: qwts1(:),qwts2(:),qwts3(:),qwts22(:)
+      integer, allocatable :: norders1(:),norders2(:),norders3(:),
+     1   norders22(:)
+      integer, allocatable :: iptype1(:),iptype2(:),iptype3(:),
+     1   iptype22(:)
+      integer, allocatable :: ixys1(:),ixys2(:),ixys3(:),ixys22(:)
+      real *8, allocatable :: srcrad1(:),srcrad22(:)
+
+      real *8, allocatable :: ts_interp1(:),ts_interp2(:)
+      integer, allocatable :: ich_interp1(:),ich_interp2(:)
+      real *8, allocatable :: dist1(:),dist2(:)
+
+      real *8, allocatable :: ts_interp12(:)
+      integer, allocatable :: ich_interp12(:)
+      real *8, allocatable :: dist12(:)
+
+      complex *16, allocatable :: soln1(:),soln2(:),soln12(:)
+      complex *16, allocatable :: soln12coefs(:),soln123(:)
+      real *8, allocatable :: t(:),w(:),umat(:,:),vmat(:,:)
+
+      real *8 dpars(2),timeinfo(3)
+      complex *16 zpars
+      integer ipars
+
+      external circ_geom
+
+      done = 1.0d0
+      pi = atan(done)*4
+
+      nch3 = nch30*ncomp
+      npts3 = k3*nch3
+      allocate(ts_interp1(npts3),ich_interp1(npts3))
+      allocate(ts_interp2(npts3),ich_interp2(npts3))
+      allocate(dist1(npts3),dist2(npts3))
+      allocate(soln1(npts3),soln2(npts3))
+
+      nch1 = nch10*ncomp
+      npts1 = nch1*k1
+
+      allocate(adjs1(2,nch1),srcinfo1(8,npts1),srccoefs1(6,npts1))
+      allocate(ts1(npts1),qwts1(npts1),norders1(nch1),iptype1(nch1))
+      allocate(ixys1(nch1+1),srcrad1(npts1))
+
+      nch2 = nch20*ncomp
+      npts2 = nch2*k2
+
+      allocate(adjs2(2,nch2),srcinfo2(8,npts2),srccoefs2(6,npts2))
+      allocate(ts2(npts2),qwts2(npts2),
+     1    norders2(nch2),iptype2(nch2))
+      allocate(ixys2(nch2+1))
+
+      k22 = 30
+      npts22 = nch2*k22
+
+      allocate(adjs22(2,nch2),srcinfo22(8,npts22),srccoefs22(6,npts22))
+      allocate(ts22(npts22),qwts22(npts22),
+     1    norders22(nch2),iptype22(nch2))
+      allocate(ixys22(nch2+1),srcrad22(npts22))
+
+      allocate(adjs3(2,nch3),srcinfo3(8,npts3),srccoefs3(6,npts3))
+      allocate(ts3(npts3),qwts3(npts3),norders3(nch3),iptype3(nch3))
+      allocate(ixys3(nch3+1))
+      
+      ndd_curv = 2
+      ndz_curv = 0
+      ndi_curv = 0
+      call get_diamond_many(nch10,ncomp,rsc,shifts,nch1,k1,npts1,
+     1  adjs1,srcinfo1,srccoefs1,qwts1,norders1,iptype1,ixys1)
+      
+      call get_diamond_many(nch20,ncomp,rsc,shifts,nch2,k2,npts2,
+     1  adjs2,srcinfo2,srccoefs2,qwts2,norders2,iptype2,ixys2)
+
+      call get_diamond_many(nch20,ncomp,rsc,shifts,nch2,k22,npts22,
+     1  adjs22,srcinfo22,srccoefs22,qwts22,norders22,iptype22,ixys22)
+
+      call get_diamond_many(nch30,ncomp,rsc,shifts,nch3,k3,npts3,
+     1  adjs3,srcinfo3,srccoefs3,qwts3,norders3,iptype3,ixys3)
+
+
+      do i=1,npts1
+        srcrad1(i) = 0
+      enddo
+
+      do i=1,npts22
+        srcrad22(i) = 0
+      enddo
+
+
+cc      call prin2('srccoefs1=*',srccoefs1,6*npts1)
+      
+      
+      call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,
+     1  npts1,srccoefs1,srcinfo1,srcrad1,8,npts3,srcinfo3,ich_interp1,
+     2  ts_interp1,dist1,timeinfo,ier)
+      
+      call findnearchunktarg_id_ts(nch2,norders22,ixys22,iptype22,
+     1  npts22,srccoefs22,srcinfo22,srcrad22,8,npts3,srcinfo3,
+     2  ich_interp2,ts_interp2,dist2,timeinfo,ier)
+
+c
+c  
+c
+      allocate(ich_interp12(npts2),ts_interp12(npts2),dist12(npts2))
+c      call findnearchunktarg_id_ts_brute(nch1,norders1,ixys1,iptype1,
+c     1  npts1,srccoefs1,srcinfo1,8,npts2,srcinfo2,ich_interp12,
+c     2  ts_interp12,dist12)
+      
+      call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,
+     1  npts1,srccoefs1,srcinfo1,srcrad1,8,npts2,srcinfo2,ich_interp12,
+     2  ts_interp12,dist12,timeinfo,ier)
+      allocate(soln12(npts2),soln12coefs(npts2))
+      
+      call interp_dens(nch1,norders1,ixys1,iptype1,npts1,
+     1  solncoefs1,npts2,ts_interp12,ich_interp12,soln12)
+c
+c
+      allocate(t(k2),w(k2),umat(k2,k2),vmat(k2,k2))
+      itype = 2
+      call legeexps(itype,k2,t,umat,vmat,w)
+c
+c  convert soln12 to soln12 coefs
+c
+      alpha = 1.0d0
+      beta = 0.0d0
+      do i=1,nch2
+        istart = ixys2(i)
+        call dgemm('n','t',2,k2,k2,alpha,soln12(istart),2,
+     1    umat,k2,beta,soln12coefs(istart),2)
+      enddo
+
+      call interp_dens(nch1,norders1,ixys1,iptype1,npts1,
+     1  solncoefs1,npts3,ts_interp1,ich_interp1,soln1)
+c
+      call interp_dens(nch2,norders2,ixys2,iptype2,npts2,
+     1  solncoefs2,npts3,ts_interp2,ich_interp2,soln2)
+      
+c
+c
+      allocate(soln123(npts3))
+      call interp_dens(nch2,norders2,ixys2,iptype2,npts2,
+     1  soln12coefs,npts3,ts_interp2,ich_interp2,soln123)
+      
+      erra = 0
+      errq = 0
+      ra = 0
+      do i=1,npts3
+        erra = erra + abs(soln1(i)-soln2(i))**2*qwts3(i)
+        errq = errq + abs(soln1(i)-soln123(i))**2*qwts3(i)
+        ra = ra + abs(soln1(i))**2*qwts3(i)
+      enddo
+      erra = sqrt(erra/ra)
+      errq = sqrt(errq/ra)
+      errq = errq/erra
+
+
+
+      return
+      end
+
+
+
+
+
+
 c
 c
 c
