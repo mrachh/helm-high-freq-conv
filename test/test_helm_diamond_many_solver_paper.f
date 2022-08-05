@@ -8,6 +8,7 @@
       integer, allocatable :: niter_ref2(:),niter_analytic_ref2(:)
       integer, allocatable :: niter(:,:),niter_analytic(:,:)
       real *8 dpars(2)
+      real *8 shifts(2,100),rsc(100)
       complex *16 zk
 
       call prini(6,13)
@@ -15,13 +16,33 @@
       dpars(1) = 1.0d0
       dpars(2) = 1.0d0
 
+      rfac = sqrt(2.0d0)
+      ncomp = 4
+      rsc(1) = 0.8d0*rfac*pi/2
+      rsc(2) = 0.8d0*rfac*pi/2
+      rsc(3) = 0.8d0*rfac*pi/2
+      rsc(4) = 0.8d0*rfac*pi/2
+
+      shifts(1,1) = rfac*pi
+      shifts(2,1) = rfac*pi
+
+      shifts(1,2) = rfac*pi
+      shifts(2,2) = -rfac*pi
+
+      shifts(1,3) = -rfac*pi
+      shifts(2,3) = rfac*pi
+
+      shifts(1,4) = -rfac*pi
+      shifts(2,4) = -rfac*pi
+
+
       
       k = 22
       nover = 30
       kref = k
       kref2 = k-4
-      nkd = 8
-      nppw = 20
+      nkd = 2
+      nppw = 3
 
       kerr = 32
       allocate(err_est_ref(nkd),err_est_ref2(nkd),err_dens_ref(nkd))
@@ -36,13 +57,18 @@ c
 
       allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
       allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
-      open(unit=33,file='circ_neu_data/circ_res.txt',access='append')
-      do ik=nkd,nkd
+      open(unit=33,file='diamond_data/diamond_res.txt',access='append')
+      do ik=1,nkd
         print *, "ik=",ik
-        zk = 10.0d0*2**(ik-1) + 0.0d0
-        nchref = ceiling(abs(zk))*4
-        ncherr = ceiling(abs(zk))*8
-        nchref2 = nchref-2
+        zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
+        nchref0 = ceiling(0.4d0*4*abs(zk)/sqrt(2.0d0))
+        ncherr0 = 2*nchref0
+        nchref20 = nchref0-2
+
+        nchref = ncomp*nchref0
+        ncherr = ncomp*ncherr
+        nchref2 = ncomp*nchref20 
+
         nptsrefg = nchref*kref
         nptsref2g = nchref2*kref2
         print *, "zk=",zk
@@ -51,30 +77,36 @@ c
         print *, "kref=",kref
         print *, "kref2=",kref2
         allocate(solnrefg(nptsrefg),solnref2g(nptsref2g))
-        call get_circ_sols(dpars,zk,k,kref,nover,nchref,nptsrefg,
+        call get_diamond_sols(ncomp,shifts,rsc,zk,k,kref,nover,
+     1     nchref0,nchref,nptsrefg,
      1     solnrefg,err_est_ref(ik),niter_analytic_ref(ik),
      1     niter_ref(ik))
 
-        call get_circ_sols(dpars,zk,k,kref2,nover,nchref2,nptsref2g,
+        call get_diamond_sols(ncomp,shifts,rsc,zk,k,kref2,nover,
+     1     nchref02,nchref2,nptsref2g,
      1     solnref2g,err_est_ref2(ik),niter_analytic_ref2(ik),
      1     niter_ref2(ik))
         
         print *, "nchref=",nchref
 
-        call get_circ_dens_error(dpars,nchref,kref,nptsrefg,
-     1    solnrefg,nchref2,kref2,nptsref2g,solnref2g,kerr,ncherr,
+        call get_diamond_many_dens_error(ncomp,shifts,rsc,nchref0,
+     1    nchref,kref,nptsrefg,
+     1    solnrefg,nchref20,nchref2,kref2,nptsref2g,solnref2g,
+     1    kerr,ncherr0,ncherr,
      1    err_dens_ref(ik),err_q_ref(ik))
 
         do ippw=1,nppw
           print *, ippw
-          rexp = (ippw-1.0d0)/(nppw-1.0d0)/3.0d0
+          rexp = (ippw-1.0d0)/(nppw-1.0d0)*0.5d0
           dppw = 2*abs(zk)**rexp
-          nch1 = ceiling(abs(zk)*dppw)
+          nch10 = ceiling(0.4d0*dppw*abs(zk)/sqrt(2.0d0))
+          nch1 = ncomp*nch10
           k1 = 1
           npts1 = nch1*k1
           allocate(solncoefsg(npts1))
 
-           call get_circ_sols(dpars,zk,k,k1,nover,nch1,npts1,
+           call get_diamond_sols(ncomp,shifts,rsc,zk,k,k1,nover,
+     1       nch10,nch1,npts1,
      1       solncoefsg,err_est(ippw,ik),niter_analytic(ippw,ik),
      1       niter(ippw,ik))
            print *, "here1"
@@ -85,12 +117,13 @@ c
            print *, "nch1=",nch1
            print *, "kerr=",kerr
            print *, "ncherr=",ncherr
-           call get_circ_dens_error(dpars,nchref,kref,nptsrefg,
-     1       solnrefg,nch1,k1,npts1,solncoefsg,kerr,ncherr,
-     1       err_dens(ippw,ik),err_q(ippw,ik))
+           call get_diamond_many_dens_error(ncomp,shifts,rsc,nchref0,
+     1       nchref,kref,nptsrefg,
+     1       solnrefg,nch10,nch1,k1,npts1,solncoefsg,kerr,ncherr0,
+     1       ncherr,err_dens(ippw,ik),err_q(ippw,ik))
            print *, "here2"
            drat = (nch1+0.0d0)/abs(zk)
-       write(33,'(2x,e11.5,2x,i4,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
+       write(33,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
      1     real(zk),
      1     nch1,drat,dppw,err_est(ippw,ik),
      1     niter_analytic(ippw,ik),niter(ippw,ik),err_dens(ippw,ik),
@@ -115,7 +148,8 @@ c
       end
 
 
-      subroutine get_circ_sols(dpars,zk,k,kg,nover,nch,nptsg,solncoefsg,
+      subroutine get_diamond_sols(ncomp,shifts,rsc,zk,k,kg,
+     1   nover,nch0,nch,nptsg,solncoefsg,
      1   err_est,niter1,niter2)
       
       implicit real *8 (a-h,o-z)
@@ -130,10 +164,9 @@ c
       complex *16, allocatable :: sigmag(:),sigmacoefsg(:)
       complex *16, allocatable :: sigmapwg(:),sigmacoefspwg(:)
       complex *16 solncoefsg(nptsg)
-      complex *16, allocatable :: solng(:),solnikg(:)
-      complex *16, allocatable :: solnikcoefsg(:)
+      complex *16, allocatable :: solng(:)
       integer, allocatable :: row_ptrg(:),col_indg(:),iquadg(:)
-      complex *16, allocatable :: wnearg(:,:),wnearcoefsg(:,:)
+      complex *16, allocatable :: wnearg(:),wnearcoefsg(:)
       integer, allocatable :: ich_id(:)
       real *8, allocatable :: ts_pts(:)
       integer, allocatable :: norders(:),ixys(:),iptype(:),ixysg(:)
@@ -143,6 +176,7 @@ c
       complex *16 pottarg,pottargex
       real *8 xyin(2),xyout(2)
       real *8 dpars(2)
+      real *8 shifts(2,ncomp),rsc(ncomp)
       real *8, allocatable :: errs(:)
       complex *16 zfac
       real *8 xy_in(2),xy_out(2)
@@ -159,6 +193,7 @@ c
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
+      zpars(3) = 1.0d0
 
       alpha = 1.0d0
       beta = 0.0d0
@@ -205,15 +240,13 @@ c
       ndd_curv = 2
       ndz_curv = 0
       ndi_curv = 0
-      call get_funcurv_geom_uni(a,b,nch,k,npts,adjs,srcinfo,
-     1  srccoefs,ts1,qwts,norders,iptype,ixys,circ_geom,
-     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+      call get_diamond_many(nch0,ncomp,rsc,shifts,nch,k,
+     1  npts,adjs,srcinfo,srccoefs,qwts,norders,iptype,ixys)
       print *, "nch=",nch
       print *, "kg=",kg
       print *, "nptsg=",nptsg
-      call get_funcurv_geom_uni(a,b,nch,kg,nptsg,adjs,srcinfog,
-     1  srccoefsg,ts1g,qwtsg,nordersg,iptype,ixysg,circ_geom,
-     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+      call get_diamond_many(nch0,ncomp,rsc,shifts,nch,kg,
+     1  nptsg,adjs,srcinfog,srccoefsg,qwtsg,nordersg,iptype,ixysg)
       call prin2('a=*',a,1)
       call prin2('b=*',b,1)
 
@@ -222,9 +255,9 @@ c
       print *, "a=",a
       print *, "b=",b
       print *, "npts_over=",npts_over
-      call get_funcurv_geom_uni(a,b,nch,nover,npts_over,adjs,srcover,
-     1  srccoefsover,tsover,wover,novers,iptype,ixyso,circ_geom,
-     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+      call get_diamond_many(nch0,ncomp,rsc,shifts,nch,nover,
+     1  npts_over,adjs,srcover,
+     1  srccoefsover,wover,novers,iptype,ixyso)
 
 
 
@@ -232,13 +265,15 @@ c
       print *, "nptsg=",nptsg
       allocate(sigmag(nptsg),sigmacoefsg(nptsg))
       allocate(sigmacoefspwg(nptsg),sigmapwg(nptsg))
-      allocate(solng(nptsg),solnikg(nptsg),solnikcoefsg(nptsg))
+      allocate(solng(nptsg))
 
-      xyin(1) = 0.1d0
-      xyin(2) = -0.33d0
+      xyin(1) = 0.1d0*rsc(1) + shifts(1,1)
+      xyin(2) = -0.33d0*rsc(1) + shifts(2,1)
 
-      xyout(1) = 3.5d0
-      xyout(2) = 3.3d0
+      xyout(1) = 3.5d1
+      xyout(2) = 3.3d1
+
+      thet = pi/4
 
 c
 c  get density info
@@ -246,12 +281,13 @@ c
       do ich=1,nch
         do j=1,kg
           ipt = (ich-1)*kg + j
-          call h2d_sprime(xyin,8,srcinfog(1,ipt),ndd,dpars,1,zk,ndi,
+          call h2d_slp(srcinfog(1,ipt),2,xyin,ndd,dpars,1,zk,ndi,
      1       ipars,sigmag(ipt))
           zkuse = ceiling(real(zk)) - 1.0d0
-          sigmapwg(ipt) = exp(ima*zkuse*ts1g(ipt))
+          xx = srcinfog(1,ipt)
+          yy = srcinfog(2,ipt)
+          sigmapwg(ipt) = exp(ima*zk*(xx*cos(thet) + yy*sin(thet)))
           solncoefsg(ipt) = 0.0d0
-          solnikcoefsg(ipt) = 0.0d0
         enddo
         istart = (ich-1)*kg + 1
         call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),
@@ -272,8 +308,8 @@ c
       nnzg = 3*kg*nch
       nquadg = nnzg*kg
 
-      allocate(row_ptrg(nptsg+1),col_indg(nnzg),wnearg(nquadg,4))
-      allocate(wnearcoefsg(nquadg,4))
+      allocate(row_ptrg(nptsg+1),col_indg(nnzg),wnearg(nquadg))
+      allocate(wnearcoefsg(nquadg))
 
       print *, "starting trid quad"
       print *, "nch=",nch
@@ -286,7 +322,7 @@ c
       print *, "nptsg=",nptsg
       call cpu_time(t1)
 C$       t1 = omp_get_wtime()     
-      call get_helm_neu_trid_quad_corr(zk,nch,k,kg,npts,nptsg,adjs,
+      call get_helm_dir_trid_quad_corr(zk,nch,k,kg,npts,nptsg,adjs,
      1   srcinfo,srcinfog,ndz,zpars,nnzg,row_ptrg,col_indg,nquadg,
      2   wnearg,wnearcoefsg)
       call cpu_time(t2)
@@ -305,44 +341,38 @@ C$       t2 = omp_get_wtime()
       numit = max(ceiling(10*abs(zk)),200)
       allocate(errs(numit+1))
       ifinout = 1
-c      call helm_comb_neu_galerkin_solver2d(nch,kg,ixysg,nptsg,
-c     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
-c     2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
-c     3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
-c     4  solncoefsg,solnikcoefsg)
-c      niter1 = niter
-      niter1 = 0
-
-c      call h2d_slp(xyout,2,xyin,ndd,dpars,1,zk,ndi,ipars,pottargex)
-c      do i=1,nch
-c        istart = (i-1)*kg+1
-c        call dgemm('n','t',2,kg,kg,alpha,solncoefsg(istart),
-c     1     2,vmatg,kg,beta,solng(istart),2)
-c        call dgemm('n','t',2,kg,kg,alpha,solnikcoefsg(istart),
-c     1     2,vmatg,kg,beta,solnikg(istart),2)
-c      enddo
-c
-c      pottarg = 0
-c      do i=1,nptsg
-c        call h2d_slp(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
-c     1     ndi,ipars,ztmp)
-c        pottarg = pottarg + ztmp*qwtsg(i)*solng(i)*ima*zpars(2)
-c        call h2d_dlp(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
-c     1     ndi,ipars,ztmp)
-c        pottarg = pottarg + ztmp*qwtsg(i)*solnikg(i)
-c      enddo
-c      call prin2_long('pottarg=*',pottarg,2)
-c      call prin2_long('pottargex=*',pottargex,2)
-c      erra = abs(pottarg-pottargex)/abs(pottargex)
-c      err_est = erra 
-      err_est = 0
-      eps_gmres = 1.0d-9 
-      call helm_comb_neu_galerkin_solver2d(nch,kg,ixysg,nptsg,
+      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
      1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
      2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
-     3  wover,numit,ifinout,sigmacoefspwg,eps_gmres,niter,errs,rres,
-     4  solncoefsg,solnikcoefsg)
+     3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
+     4  solncoefsg)
+      niter1 = niter
+
+      call h2d_slp(xyout,2,xyin,ndd,dpars,1,zk,ndi,ipars,pottargex)
+      do i=1,nch
+        istart = (i-1)*kg+1
+        call dgemm('n','t',2,kg,kg,alpha,solncoefsg(istart),
+     1     2,vmatg,kg,beta,solng(istart),2)
+      enddo
+
+      pottarg = 0
+      do i=1,nptsg
+        call h2d_comb(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
+     1     ndi,ipars,ztmp)
+        pottarg = pottarg + ztmp*qwtsg(i)*solng(i)
+      enddo
+      call prin2_long('pottarg=*',pottarg,2)
+      call prin2_long('pottargex=*',pottargex,2)
+      erra = abs(pottarg-pottargex)/abs(pottargex)
+      err_est = erra 
+      
+      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
+     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
+     2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
+     3  wover,numit,ifinout,sigmacoefspwg,eps,niter,errs,rres,
+     4  solncoefsg)
       niter2 = niter
+      print *, "erra=",erra
 
       
        
