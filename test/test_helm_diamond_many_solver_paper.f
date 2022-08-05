@@ -13,6 +13,9 @@
 
       call prini(6,13)
 
+      done = 1.0d0
+      pi = atan(done)*4
+
       dpars(1) = 1.0d0
       dpars(2) = 1.0d0
 
