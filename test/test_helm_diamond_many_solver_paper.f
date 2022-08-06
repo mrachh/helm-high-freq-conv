@@ -40,16 +40,16 @@
 
 
       
-c      k = 22
-c      nover = 30
-c      kref = k
-c      kref2 = k-4
-      k = 4
-      nover = 10
+      k = 22
+      nover = 30
       kref = k
-      kref2 = k-2
-      nkd = 2
-      nppw = 3
+      kref2 = k-4
+c      k = 4
+c      nover = 10
+c      kref = k
+c      kref2 = k-2
+      nkd = 1
+      nppw = 20
 
       kerr = 32
       allocate(err_est_ref(nkd),err_est_ref2(nkd),err_dens_ref(nkd))
@@ -64,14 +64,15 @@ c
 
       allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
       allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
-      open(unit=33,file='diamond_data/diamond_res.txt',access='append')
-      do ik=1,nkd
+      do ik=nkd,nkd
+       open(unit=33,file='diamond_data/diamond_res.txt',access='append')
         print *, "ik=",ik
         zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
         zk = zk/4
-        nchref0 = ceiling(0.4d0*4*abs(zk)/sqrt(2.0d0))
+        nchref0 = ceiling(0.4d0*4*abs(zk)/sqrt(2.0d0))*2
         ncherr0 = 2*nchref0
-        nchref20 = nchref0-2
+        nchref20 = nchref0 - 2
+        if(nchref20.le.2) nchref20 = 2
 
         nchref = ncomp*nchref0*4
         ncherr = ncomp*ncherr*4
@@ -91,7 +92,7 @@ c
      1     niter_ref(ik))
 
         call get_diamond_sols(ncomp,shifts,rsc,zk,k,kref2,nover,
-     1     nchref02,nchref2,nptsref2g,
+     1     nchref20,nchref2,nptsref2g,
      1     solnref2g,err_est_ref2(ik),niter_analytic_ref2(ik),
      1     niter_ref2(ik))
         
@@ -102,7 +103,9 @@ c
      1    solnrefg,nchref20,nchref2,kref2,nptsref2g,solnref2g,
      1    kerr,ncherr0,ncherr,
      1    err_dens_ref(ik),err_q_ref(ik))
-
+        print *, "err_dens_ref=",err_dens_ref(ik)
+        print *, "err_q_ref=",err_q_ref(ik)
+        stop
         do ippw=1,nppw
           print *, ippw
           rexp = (ippw-1.0d0)/(nppw-1.0d0)*0.5d0
@@ -112,6 +115,7 @@ c
           k1 = 1
           npts1 = nch1*k1
           allocate(solncoefsg(npts1))
+
 
            call get_diamond_sols(ncomp,shifts,rsc,zk,k,k1,nover,
      1       nch10,nch1,npts1,
@@ -139,16 +143,16 @@ c
           deallocate(solncoefsg)
         enddo
         deallocate(solnrefg,solnref2g)
+        close(33)
       enddo
-      call prin2('err_est=*',err_est_ref,nkd)
-      call prin2('err_est2=*',err_est_ref2,nkd)
-      call prin2('err_dens_ref=*',err_dens_ref,nkd)
-      call prinf('niter_ref=*',niter_ref,nkd)
-      call prinf('niter_ref2=*',niter_ref2,nkd)
-      call prinf('niter_analytic_ref=*',niter_analytic_ref,nkd)
-      call prinf('niter_analytic_ref2=*',niter_analytic_ref2,nkd)
-      call prin2('err_q_ref=*',err_q_ref,nkd)
-      close(33)
+      call prin2('err_est=*',err_est_ref(nkd),1)
+      call prin2('err_est2=*',err_est_ref2(nkd),1)
+      call prin2('err_dens_ref=*',err_dens_ref(nkd),1)
+      call prinf('niter_ref=*',niter_ref(nkd),1)
+      call prinf('niter_ref2=*',niter_ref2(nkd),1)
+      call prinf('niter_analytic_ref=*',niter_analytic_ref(nkd),1)
+      call prinf('niter_analytic_ref2=*',niter_analytic_ref2(nkd),1)
+      call prin2('err_q_ref=*',err_q_ref(nkd),1)
       
 
 
@@ -353,29 +357,30 @@ C$       t2 = omp_get_wtime()
       allocate(errs(numit+1))
       ifinout = 1
       print *, "starting gmres"
-      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
-     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
-     2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
-     3  wover,numit,ifinout,sigmacoefsg,eps_gmres,niter,errs,rres,
-     4  solncoefsg)
-      niter1 = niter
+c      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
+c     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,iquadg,
+c     2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
+c     3  wover,numit,ifinout,sigmacoefsg,eps_gmres,niter,errs,rres,
+c     4  solncoefsg)
+      niter1 = 0
 
-      call h2d_slp(xyout,2,xyin,ndd,dpars,1,zk,ndi,ipars,pottargex)
-      do i=1,nch
-        istart = (i-1)*kg+1
-        call dgemm('n','t',2,kg,kg,alpha,solncoefsg(istart),
-     1     2,vmatg,kg,beta,solng(istart),2)
-      enddo
-
-      pottarg = 0
-      do i=1,nptsg
-        call h2d_comb(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
-     1     ndi,ipars,ztmp)
-        pottarg = pottarg + ztmp*qwtsg(i)*solng(i)
-      enddo
-      call prin2_long('pottarg=*',pottarg,2)
-      call prin2_long('pottargex=*',pottargex,2)
-      erra = abs(pottarg-pottargex)/abs(pottargex)
+c      call h2d_slp(xyout,2,xyin,ndd,dpars,1,zk,ndi,ipars,pottargex)
+c      do i=1,nch
+c        istart = (i-1)*kg+1
+c        call dgemm('n','t',2,kg,kg,alpha,solncoefsg(istart),
+c     1     2,vmatg,kg,beta,solng(istart),2)
+c      enddo
+c
+c      pottarg = 0
+c      do i=1,nptsg
+c        call h2d_comb(srcinfog(1,i),2,xyout,ndd,dpars,ndz,zpars,
+c     1     ndi,ipars,ztmp)
+c        pottarg = pottarg + ztmp*qwtsg(i)*solng(i)
+c      enddo
+c      call prin2_long('pottarg=*',pottarg,2)
+c      call prin2_long('pottargex=*',pottargex,2)
+c      erra = abs(pottarg-pottargex)/abs(pottargex)
+      erra = 0
       err_est = erra 
       
       call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
