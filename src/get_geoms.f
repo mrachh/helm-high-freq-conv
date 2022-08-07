@@ -93,7 +93,7 @@ c
       enddo
       ndd = 3
       ndi = 1
-      dpars(1) = 0.05d0
+      dpars(1) = 0.1d0
       dpars(2) = -1.0d0
       dpars(3) = 0.0d0
       a = -1.0d0
@@ -166,8 +166,8 @@ c
           srcinfo(4,ipt) = srcinfo(4,ipt)*rsc(icomp)
           srcinfo(5,ipt) = srcinfo(5,ipt)*rsc(icomp)
           srcinfo(6,ipt) = srcinfo(6,ipt)*rsc(icomp)
-          srccoefs(1,ipt) = srccoefs(1,ipt)*rsc(icomp) + shifts(1,icomp)
-          srccoefs(2,ipt) = srccoefs(2,ipt)*rsc(icomp) + shifts(2,icomp)
+          srccoefs(1,ipt) = srccoefs(1,ipt)*rsc(icomp)
+          srccoefs(2,ipt) = srccoefs(2,ipt)*rsc(icomp)
           srccoefs(3,ipt) = srccoefs(3,ipt)*rsc(icomp)
           srccoefs(4,ipt) = srccoefs(4,ipt)*rsc(icomp)
           srccoefs(5,ipt) = srccoefs(5,ipt)*rsc(icomp)
@@ -177,6 +177,9 @@ c
         do ich=ichstart,ichend
           adjs(1,ich) = adjs0(1,ich-ichstart+1) + ichstart-1
           adjs(2,ich) = adjs0(2,ich-ichstart+1) + ichstart-1
+          istart = ixys(ich)
+          srccoefs(1:2,istart) = srccoefs(1:2,istart) +
+     1       shifts(1:2,icomp)
         enddo
       enddo
 
@@ -278,8 +281,8 @@ c
 c       this effectively smoothes off the corner from the abs(x) function
 c
 c
-        done=1
-        two=2
+        done=1.0d0
+        two=2.0d0
         pi=4*atan(done)
 c
 c       . . . formulas are computed via maple
@@ -288,7 +291,7 @@ c
         call qerrfun(x2,verf)
         val=a*x*verf+b+sqrt(two/pi)*a*h*exp(-x*x/two/h/h)
 c
-        fnorm=1/sqrt(2*pi)*exp(-x*x/2)
+        fnorm=1.0d0/sqrt(2.0d0*pi)*exp(-x*x/2)
         der=a*verf
         der2=a*sqrt(two/pi)/h*exp(-x*x/two/h/h)
 c
@@ -535,7 +538,7 @@ c
 
       subroutine get_diamond_many_dens_error(ncomp,shifts,rsc,
      1   nch10,nch1,k1,npts1,solncoefs1,nch20,nch2,k2,npts2,
-     1   solncoefs2,k3,nch30,nch3,erra,errq)
+     1   solncoefs2,k3,nch30,nch3,erra,errq,ifwrite,iunit)
 c
 c   Given two densities defined on two grids, and a third
 c   reference grid to compute the error, evalute
@@ -584,6 +587,9 @@ c
 
       done = 1.0d0
       pi = atan(done)*4
+
+      print *, "ncomp=",ncomp
+      print *, "nch30=",nch30
 
       nch3 = nch30*ncomp*4
       npts3 = k3*nch3
@@ -634,6 +640,10 @@ c
       call get_diamond_many(nch30,ncomp,rsc,shifts,nch3,k3,npts3,
      1  adjs3,srcinfo3,srccoefs3,qwts3,norders3,iptype3,ixys3)
 
+      call prin2('srcinfo3=*',srcinfo3,24)
+      call prin2('srcinfo2=*',srcinfo2,24)
+      call prin2('srcinfo1=*',srcinfo1,24)
+      call prin2('srcinfo22=*',srcinfo22,24)
 
       do i=1,npts1
         srcrad1(i) = 0
@@ -646,10 +656,10 @@ c
 
 cc      call prin2('srccoefs1=*',srccoefs1,6*npts1)
       
-      
       call findnearchunktarg_id_ts(nch1,norders1,ixys1,iptype1,
      1  npts1,srccoefs1,srcinfo1,srcrad1,8,npts3,srcinfo3,ich_interp1,
      2  ts_interp1,dist1,timeinfo,ier)
+
       
       call findnearchunktarg_id_ts(nch2,norders22,ixys22,iptype22,
      1  npts22,srccoefs22,srcinfo22,srcrad22,8,npts3,srcinfo3,
@@ -710,7 +720,14 @@ c
       errq = sqrt(errq/ra)
       errq = errq/erra
 
-
+      if(ifwrite.eq.1) then 
+        ra = 0
+        do i=1,npts3 
+          ra = ra + qwts3(i)
+          write(iunit,*) ra,real(soln1(i)),imag(soln1(i)),
+     1     real(soln2(i)),imag(soln2(i))
+        enddo
+      endif
 
       return
       end

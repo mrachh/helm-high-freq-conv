@@ -48,7 +48,7 @@ c      k = 4
 c      nover = 10
 c      kref = k
 c      kref2 = k-2
-      nkd = 1
+      nkd = 3
       nppw = 20
 
       kerr = 32
@@ -65,17 +65,17 @@ c
       allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
       allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
       do ik=nkd,nkd
-       open(unit=33,file='diamond_data/diamond_res.txt',access='append')
+       open(unit=133,file='diamond_data/diamond_res.txt',
+     1    access='append')
         print *, "ik=",ik
         zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
-        zk = zk/4
-        nchref0 = ceiling(0.4d0*4*abs(zk)/sqrt(2.0d0))*2
+        nchref0 = ceiling(0.4d0*4*abs(zk)/sqrt(2.0d0))
         ncherr0 = 2*nchref0
         nchref20 = nchref0 - 2
         if(nchref20.le.2) nchref20 = 2
 
         nchref = ncomp*nchref0*4
-        ncherr = ncomp*ncherr*4
+        ncherr = ncomp*ncherr0*4
         nchref2 = ncomp*nchref20*4 
 
         nptsrefg = nchref*kref
@@ -86,26 +86,32 @@ c
         print *, "kref=",kref
         print *, "kref2=",kref2
         allocate(solnrefg(nptsrefg),solnref2g(nptsref2g))
+        ifwrite = 0
+        iunit = 38
         call get_diamond_sols(ncomp,shifts,rsc,zk,k,kref,nover,
      1     nchref0,nchref,nptsrefg,
      1     solnrefg,err_est_ref(ik),niter_analytic_ref(ik),
-     1     niter_ref(ik))
+     1     niter_ref(ik),ifwrite,iunit)
 
+        ifwrite = 0
+        iunit = 39
         call get_diamond_sols(ncomp,shifts,rsc,zk,k,kref2,nover,
      1     nchref20,nchref2,nptsref2g,
      1     solnref2g,err_est_ref2(ik),niter_analytic_ref2(ik),
-     1     niter_ref2(ik))
+     1     niter_ref2(ik),ifwrite,iunit)
         
         print *, "nchref=",nchref
 
+        ifwrite = 0
+        iunit = 40
         call get_diamond_many_dens_error(ncomp,shifts,rsc,nchref0,
      1    nchref,kref,nptsrefg,
      1    solnrefg,nchref20,nchref2,kref2,nptsref2g,solnref2g,
      1    kerr,ncherr0,ncherr,
-     1    err_dens_ref(ik),err_q_ref(ik))
+     1    err_dens_ref(ik),err_q_ref(ik),ifwrite,iunit)
         print *, "err_dens_ref=",err_dens_ref(ik)
         print *, "err_q_ref=",err_q_ref(ik)
-        stop
+
         do ippw=1,nppw
           print *, ippw
           rexp = (ippw-1.0d0)/(nppw-1.0d0)*0.5d0
@@ -117,10 +123,12 @@ c
           allocate(solncoefsg(npts1))
 
 
+           ifwrite = 0
+           iunit = 39
            call get_diamond_sols(ncomp,shifts,rsc,zk,k,k1,nover,
      1       nch10,nch1,npts1,
      1       solncoefsg,err_est(ippw,ik),niter_analytic(ippw,ik),
-     1       niter(ippw,ik))
+     1       niter(ippw,ik),ifwrite,iunit)
            print *, "here1"
 
         
@@ -129,13 +137,15 @@ c
            print *, "nch1=",nch1
            print *, "kerr=",kerr
            print *, "ncherr=",ncherr
+           ifwrite = 0
+           iunit = 40
            call get_diamond_many_dens_error(ncomp,shifts,rsc,nchref0,
      1       nchref,kref,nptsrefg,
      1       solnrefg,nch10,nch1,k1,npts1,solncoefsg,kerr,ncherr0,
-     1       ncherr,err_dens(ippw,ik),err_q(ippw,ik))
+     1       ncherr,err_dens(ippw,ik),err_q(ippw,ik),ifwrite,iunit)
            print *, "here2"
            drat = (nch1+0.0d0)/abs(zk)
-       write(33,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
+       write(133,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
      1     real(zk),
      1     nch1,drat,dppw,err_est(ippw,ik),
      1     niter_analytic(ippw,ik),niter(ippw,ik),err_dens(ippw,ik),
@@ -143,7 +153,7 @@ c
           deallocate(solncoefsg)
         enddo
         deallocate(solnrefg,solnref2g)
-        close(33)
+        close(133)
       enddo
       call prin2('err_est=*',err_est_ref(nkd),1)
       call prin2('err_est2=*',err_est_ref2(nkd),1)
@@ -162,7 +172,7 @@ c
 
       subroutine get_diamond_sols(ncomp,shifts,rsc,zk,k,kg,
      1   nover,nch0,nch,nptsg,solncoefsg,
-     1   err_est,niter1,niter2)
+     1   err_est,niter1,niter2,ifwrite,iunit)
       
       implicit real *8 (a-h,o-z)
       real *8, allocatable :: srcinfo(:,:),qwts(:),srccoefs(:,:)
@@ -390,6 +400,19 @@ c      erra = abs(pottarg-pottargex)/abs(pottargex)
      4  solncoefsg)
       niter2 = niter
       print *, "erra=",erra
+      if(ifwrite.eq.1) then
+        do i=1,nch
+          istart = (i-1)*kg+1
+          call dgemm('n','t',2,kg,kg,alpha,solncoefsg(istart),
+     1       2,vmatg,kg,beta,solng(istart),2)
+        enddo
+        ra = 0
+        do i=1,nptsg
+           ra = ra + qwtsg(i)
+           write(iunit,*) ra,real(solng(i)),imag(solng(i))
+        enddo
+
+      endif
 
       
        
