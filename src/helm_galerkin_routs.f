@@ -1935,7 +1935,7 @@ c
       complex *16 wnear(nquad),sigmacoefs(nch)
       integer nover,nptso,ixyso(nch+1)
       real *8 srcover(8,nptso),whtsover(nptso)
-      complex *16 potcoefs(nch)
+      complex *16 potcoefs(nch),ztmp
 
       complex *16, allocatable :: sigma(:),pot(:)
       integer, allocatable :: norders(:),iptype(:),novers(:)
@@ -1945,7 +1945,7 @@ c
       do i=1,nch
         do j=1,k
           ipt = (i-1)*k + j
-          sigma(ipt) = sigmacoefs(ich)
+          sigma(ipt) = sigmacoefs(i)
         enddo
       enddo
 
@@ -1955,7 +1955,6 @@ c
         norders(i) = k
         iptype(i) = 1
         novers(i) = nover
-
       enddo
 
       call lpcomp_helm_comb_dir_addsub_2d(nch,norders,ixys,
@@ -1969,13 +1968,13 @@ c
       do i=1,nch
         potcoefs(i) = 0
         ra = 0
-        rtmp = 0
+        ztmp = 0
         do j=1,k
           ipt = (i-1)*k + j
           ra = ra + qwts(ipt)
-          rtmp = rtmp + pot(ipt)*qwts(ipt)
+          ztmp = ztmp + pot(ipt)*qwts(ipt)
         enddo
-        potcoefs(i) = rtmp/ra
+        potcoefs(i) = ztmp/ra
       enddo
 
 
@@ -2161,7 +2160,6 @@ C$OMP PARALLEL DO DEFAULT(SHARED)
         vmat(i,1) = rhscoefs(i)/rb
       enddo
 C$OMP END PARALLEL DO      
-
       svec(1) = rb
 
       do it=1,numit

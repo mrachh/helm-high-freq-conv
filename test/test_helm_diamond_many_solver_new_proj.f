@@ -6,15 +6,18 @@
       real *8, allocatable :: ts(:),umat(:,:),vmat(:,:),wts(:)
       real *8, allocatable :: tsg(:),umatg(:,:),vmatg(:,:),wtsg(:)
       real *8, allocatable :: tover(:),wtsover(:)
-      real *8 umo,vmo
+      real *8 umo,vmo,pols(100)
       complex *16, allocatable :: sigmag(:),sigmacoefsg(:),solncoefsg(:)
       complex *16, allocatable :: solng(:)
       complex *16, allocatable :: sigma(:),sigmacoefs(:),solncoefs(:)
       complex *16, allocatable :: soln(:)
+      complex *16, allocatable :: sigmacoefs_full(:),solncoefs_full(:)
+      complex *16, allocatable :: sigmacoefsg_full(:),solncoefsg_full(:)
       integer, allocatable :: row_ptrg(:),col_indg(:),iquadg(:)
       complex *16, allocatable :: wnearg(:),wnearcoefsg(:)
       integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
       complex *16, allocatable :: wnear(:),wnearcoefs(:)
+      complex *16, allocatable :: vnval(:),vval(:),pnvval(:)
       integer, allocatable :: ich_id(:)
       real *8, allocatable :: ts_pts(:)
       integer, allocatable :: norders(:),ixys(:),iptype(:),ixysg(:)
@@ -44,8 +47,14 @@
       done = 1.0d0
       pi = atan(done)*4
 
+      ik = 2
+      ippw = 15
+      nppw = 20
+      open(unit=133,file='diamond_data/diamond_res_newproj.txt',
+     1    access='append')
+
       zk = 100.0d0 + 0.0d0*ima
-      zk = 10.0d0*sqrt(2.0d0)
+      zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
@@ -64,13 +73,17 @@ c
 
       k = 22
       kg = 16
-      nover = 30
+      nover = 40
       itype = 2
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
       call legeexps(itype,k,ts,umat,vmat,wts)
 
       allocate(tsg(kg),umatg(kg,kg),vmatg(kg,kg),wtsg(kg))
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
+
+      allocate(tover(nover),wtsover(nover))
+      itype = 1
+      call legeexps(itype,nover,tover,umo,vmo,wtsover)
 
       rfac = sqrt(2.0d0)
       ncomp = 4
@@ -91,8 +104,15 @@ c
       shifts(1,4) = -rfac*pi
       shifts(2,4) = -rfac*pi
 
-      nch0 = ceiling(0.4*4*abs(zk)/sqrt(2.0d0))*2
-      nch = 4*nch0*ncomp
+c      nch0 = ceiling(0.4*4*abs(zk)/sqrt(2.0d0))*4
+c      nch = 4*nch0*ncomp
+      rexp = (ippw-1.0d0)/(nppw-1.0d0)*0.4d0
+      if(ippw.eq.21) rexp = 0.6d0
+      if(ippw.eq.22) rexp = 0.8d0
+      if(ippw.eq.23) rexp = 1.0d0
+      dppw = 2*abs(zk)**rexp
+      nch0 = ceiling(0.4d0*dppw*abs(zk)/sqrt(2.0d0))
+      nch = ncomp*nch0*4
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
@@ -126,18 +146,13 @@ c
 
 
 
-
       print *, "nptsg=",nptsg
       allocate(sigmag(nptsg),sigmacoefsg(nch),solncoefsg(nch))
       allocate(solng(nptsg))
       allocate(sigma(npts),sigmacoefs(nch),solncoefs(nch))
+      allocate(sigmacoefs_full(npts),solncoefs_full(npts))
+      allocate(sigmacoefsg_full(nptsg),solncoefsg_full(nptsg))
       allocate(soln(npts))
-
-      xyin(1) = 0.1d0*rsc(1) + shifts(1,1)
-      xyin(2) = -0.33d0*rsc(1) + shifts(2,1)
-
-      xyout(1) = 3.5d1
-      xyout(2) = 3.3d1
 
 c
 c  get density info
@@ -148,15 +163,15 @@ c
         ra = 0
         do j=1,kg
           ipt = (ich-1)*kg + j
-          call h2d_slp(srcinfog(1,ipt),2,xyin,ndd,dpars,1,zk,ndi,
-     1       ipars,sigmag(ipt))
           sigmag(ipt) = exp(ima*zk*(srcinfog(1,ipt)*cos(thet)+ 
      1         srcinfog(2,ipt)*sin(thet)))
-          solncoefsg(ipt) = 0.0d0
           sigmacoefsg(ich) = sigmacoefsg(ich) + sigmag(ipt)*qwtsg(ipt)
           ra = ra + qwtsg(ipt)
         enddo
         sigmacoefsg(ich) = sigmacoefsg(ich)/ra
+        istart = (ich-1)*kg+1
+        call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),2,umatg,
+     1     kg,beta,sigmacoefsg_full(istart),2)
       enddo
 
       do ich=1,nch
@@ -166,11 +181,13 @@ c
           ipt = (ich-1)*k + j
           sigma(ipt) = exp(ima*zk*(srcinfo(1,ipt)*cos(thet)+ 
      1         srcinfo(2,ipt)*sin(thet)))
-          solncoefs(ipt) = 0.0d0
           sigmacoefs(ich) = sigmacoefs(ich) + sigma(ipt)*qwts(ipt)
           ra = ra + qwts(ipt)
         enddo
         sigmacoefs(ich) = sigmacoefs(ich)/ra
+        istart = (ich-1)*k+1
+        call dgemm('n','t',2,k,k,alpha,sigma(istart),2,umat,
+     1     k,beta,sigmacoefs_full(istart),2)
       enddo
       call prin2('sigmacoefsg=*',sigmacoefsg,24)
       call prin2('sigmacoefs=*',sigmacoefs,24)
@@ -200,7 +217,6 @@ c
       print *, "k=",k
       print *, "nnz=",nnz
       print *, "nquad=",nquad
-      stop
       call cpu_time(t1)
 C$       t1 = omp_get_wtime()     
       call get_helm_dir_trid_quad_corr(zk,nch,k,k,npts,npts,adjs,
@@ -227,29 +243,107 @@ C$       t2 = omp_get_wtime()
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
       iquadtype = 1
-      eps = 0.51d-8
+      eps = 0.51d-7
 
       niter = 0
       numit = max(ceiling(10*abs(zk)),200)
       allocate(errs(numit+1))
       ifinout = 1
-      call helm_comb_dir_galerkin_solver2d_new_proj(nch,kg,ixysg,nptsg,
-     1  srccoefsg,srcinfog,qwtsg,eps,zpars,nnzg,row_ptrg,col_indg,
-     2  iquadg,
-     2  nquadg,wnearg,novers(1),npts_over,ixyso,srcover,
-     3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
-     4  solncoefsg)
+c      call helm_comb_dir_galerkin_solver2d_new_proj(nch,kg,ixysg,nptsg,
+c     1  srccoefsg,srcinfog,qwtsg,eps,zpars,nnzg,row_ptrg,col_indg,
+c     2  iquadg,
+c     2  nquadg,wnearg,novers(1),npts_over,ixyso,srcover,
+c     3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
+c     4  solncoefsg)
 
       call helm_comb_dir_galerkin_solver2d_new_proj(nch,k,ixys,npts,
      1  srccoefs,srcinfo,qwts,eps,zpars,nnz,row_ptr,col_ind,
      2  iquad,
      2  nquad,wnear,novers(1),npts_over,ixyso,srcover,
-     3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
+     3  wover,numit,ifinout,sigmacoefs,eps,niter,errs,rres,
      4  solncoefs)
-      call prin2('solncoefsg=*',solncoefsg,24)
+
+c      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
+c     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,
+c     2  iquadg,
+c     2  nquadg,wnearcoefsg,novers(1),npts_over,ixyso,srcover,
+c     3  wover,numit,ifinout,sigmacoefsg_full,eps,niter,errs,rres,
+c     4  solncoefsg_full)
+
+      call helm_comb_dir_galerkin_solver2d(nch,k,ixys,npts,
+     1  srcinfo,eps,zpars,nnz,row_ptr,col_ind,
+     2  iquad,
+     2  nquad,wnearcoefs,novers(1),npts_over,ixyso,srcover,
+     3  wover,numit,ifinout,sigmacoefs_full,eps,niter,errs,rres,
+     4  solncoefs_full)
+
+c      call prin2('solncoefsg=*',solncoefsg,24)
       call prin2('solncoefs=*',solncoefs,24)
 
+c      call prin2('solncoefsg_full=*',solncoefsg_full,2*kg+2)
+      call prin2('solncoefs_full=*',solncoefs_full,2*k+2)
 
+      allocate(vval(npts_over),vnval(npts_over),pnvval(npts_over))
+      do i=1,nch
+        do j=1,nover
+          ipt = (i-1)*nover + j
+          vnval(ipt) = solncoefs(i)
+          call legepols(tover(j),k-1,pols)
+          vval(ipt) = 0
+          pnvval(ipt) = 0
+          do l=1,k
+            lpt = (i-1)*k + l
+            vval(ipt) = vval(ipt) + solncoefs_full(lpt)*pols(l)
+          enddo
+        enddo
+      enddo
+
+      do i=1,nch
+        ra = 0
+        ztmp = 0
+        do j=1,nover
+          ipt = (i-1)*nover + j
+          ztmp = ztmp + vval(ipt)*wover(ipt)
+          ra = ra + wover(ipt)
+        enddo
+        ztmp =ztmp/ra
+        do j=1,nover
+          ipt = (i-1)*nover+j
+          pnvval(ipt) = ztmp
+        enddo
+      enddo
+      call prin2('pnnval=*',pnvval,2)
+      call prin2('vval=*',vval,2*nover)
+      erra = 0
+      errq = 0
+      rnum = 0
+      ra = 0
+      do i=1,npts_over
+        erra = erra + abs(vval(i)-vnval(i))**2*wover(i)
+        rnum = rnum + abs(vval(i)-pnvval(i))**2*wover(i)
+      enddo
+      erra = sqrt(erra)
+      rnum = sqrt(rnum)
+      errq = rnum/erra
+
+      print *, "erra=",erra
+      print *, "errq=",errq
+      
+c      nchuse0 = nch0
+c      nchuse = ncomp*4*nchuse0
+c      ifwrite = 0
+c      iunit = 39
+c      kuse = 2*k
+c
+c      call get_diamond_many_dens_error(ncomp,shifts,rsc,
+c     1  nch0,nch,k,npts,solncoefs_full,nch0,nch,1,nch,
+c     2  solncoefs,kuse,nchuse0,nchuse,erra1,errq1,ifwrite,iunit)
+c      print *, "erra=",erra1
+c      print *, "errq=",errq1
+       drat = (nch+0.0d0)/abs(zk)
+       write(133,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
+     1     real(zk),
+     1     nch,drat,dppw,0.0d0,0,0,erra,errq
 
       
 
