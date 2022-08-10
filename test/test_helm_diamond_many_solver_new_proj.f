@@ -1,10 +1,10 @@
       implicit real *8 (a-h,o-z)
 
-      nk = 2
+      nk = 4
       nppw = 20
       ifwrite = 1
       ifplot = 0
-      do ik=1,nk
+      do ik=0,nk
         do ippw=1,nppw
           call diamond_many(ik,ippw,ifwrite,iplot)
         enddo
@@ -67,14 +67,12 @@
       done = 1.0d0
       pi = atan(done)*4
 
-      open(unit=133,file='diamond_data/diamond_res_newproj2.txt',
+      open(unit=133,file='diamond_data/diamond_res_newproj2_thet10.txt',
      1    access='append')
-      ifwrite = 0
-      ifplot = 1
 
       zk = 100.0d0 + 0.0d0*ima
       zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
-      if(ik.eq.0) zk = 55.0d0
+      if(ik.eq.0) zk = 25.0d0
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
@@ -91,9 +89,9 @@ c
 c  nover is the oversampled source order
 c
 
-      k = 22
-      kg = 16
-      nover = 40
+      k = 16
+      kg = 14
+      nover = 24
       itype = 2
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
       call legeexps(itype,k,ts,umat,vmat,wts)
@@ -176,7 +174,7 @@ c      nch = 4*nch0*ncomp
 c
 c  get density info
 c
-      thet = 0.087d0
+      thet = 0.087d0*2
       do ich=1,nch
         sigmacoefsg(ich) = 0
         ra = 0
@@ -262,7 +260,7 @@ C$       t2 = omp_get_wtime()
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
       iquadtype = 1
-      eps = 0.51d-7
+      eps = 0.51d-5
 
       niter = 0
       numit = max(ceiling(10*abs(zk)),200)
