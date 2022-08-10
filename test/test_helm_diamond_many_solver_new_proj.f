@@ -1,4 +1,24 @@
       implicit real *8 (a-h,o-z)
+
+      nk = 2
+      nppw = 20
+      ifwrite = 1
+      ifplot = 0
+      do ik=1,nk
+        do ippw=1,nppw
+          call diamond_many(ik,ippw,ifwrite,iplot)
+        enddo
+      enddo
+
+
+
+      stop
+      end
+
+      subroutine diamond_many(ik,ippw,ifwrite,ifplot)
+
+
+      implicit real *8 (a-h,o-z)
       real *8, allocatable :: srcinfo(:,:),qwts(:),srccoefs(:,:)
       real *8, allocatable :: srcinfog(:,:),qwtsg(:),srccoefsg(:,:)
       real *8, allocatable :: srcover(:,:),wover(:),srccoefsover(:,:)
@@ -47,14 +67,14 @@
       done = 1.0d0
       pi = atan(done)*4
 
-      ik = 2
-      ippw = 15
-      nppw = 20
-      open(unit=133,file='diamond_data/diamond_res_newproj.txt',
+      open(unit=133,file='diamond_data/diamond_res_newproj2.txt',
      1    access='append')
+      ifwrite = 0
+      ifplot = 1
 
       zk = 100.0d0 + 0.0d0*ima
       zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
+      if(ik.eq.0) zk = 55.0d0
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
@@ -106,12 +126,11 @@ c
 
 c      nch0 = ceiling(0.4*4*abs(zk)/sqrt(2.0d0))*4
 c      nch = 4*nch0*ncomp
-      rexp = (ippw-1.0d0)/(nppw-1.0d0)*0.4d0
-      if(ippw.eq.21) rexp = 0.6d0
-      if(ippw.eq.22) rexp = 0.8d0
-      if(ippw.eq.23) rexp = 1.0d0
-      dppw = 2*abs(zk)**rexp
-      nch0 = ceiling(0.4d0*dppw*abs(zk)/sqrt(2.0d0))
+
+      if(ippw.le.10) drat = 10 + ippw*1.5d0
+      if(ippw.gt.10) drat = 25 + (ippw-10)*2.5d0
+
+      nch0 = ceiling(drat*abs(zk)/4/ncomp)
       nch = ncomp*nch0*4
       npts = nch*k
       npts_over = nch*nover
@@ -341,11 +360,108 @@ c     2  solncoefs,kuse,nchuse0,nchuse,erra1,errq1,ifwrite,iunit)
 c      print *, "erra=",erra1
 c      print *, "errq=",errq1
        drat = (nch+0.0d0)/abs(zk)
+       if(ifwrite.eq.1) then
        write(133,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
      1     real(zk),
      1     nch,drat,dppw,0.0d0,0,0,erra,errq
+      endif
+
+      if(ifplot.eq.1) then
+        ntlat = 601
+        ntarg = ntlat*ntlat
+
+        allocate(targs(2,ntarg))
+
+        xmin = -10
+        xmax = 10
+        ymin = -10
+        ymax = 10
+        allocate(isin(ntarg),isin0(ntarg))
+        do ix=1,ntlat
+          do iy=1,ntlat
+            ipt = (ix-1)*ntlat + iy
+            targs(1,ipt) = xmin + (xmax-xmin)*(ix-1.0d0)/(ntlat-1.0d0)
+            targs(2,ipt) = ymax + (ymin-ymax)*(iy-2.0d0)/(ntlat-1.0d0)
+            isin(ipt) = 0
+          enddo
+        enddo
+
+
+        do icomp=1,ncomp
+           istart = 4*k*nch0*(icomp-1)+1
+           nchuse = 4*nch0
+           npts0 = nchuse*k
+           call chunk_interior(nchuse,norders,ixys,iptype,npts0,
+     1        srcinfo(1,istart),srccoefs(1,istart),targs,2,ntarg,isin0)
+           do i=1,ntarg
+             isin(i) = isin(i) + isin0(i)
+           enddo
+        enddo
+
+        allocate(potplot(ntarg))
+        do i=1,ntarg
+          potplot(i) = isin(i)
+        enddo
+        allocate(nptcomp(ncomp))
+        do i=1,ncomp
+          nptcomp(i) = 4*nch0*k
+        enddo
+        call pyimage4(33,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+
+        allocate(pottarg_plot(ntarg),pottargex_plot(ntarg))
+        allocate(ich_id(ntarg),ts_pts(ntarg))
+        do i=1,ntarg
+          call h2d_slp(targs(1,i),2,xyin,ndd,dpars,1,zk,ndi,ipars,
+     1       pottargex_plot(i))
+          ich_id(i) = -1
+          ts_pts(i) = 0
+        enddo
+
+        do i=1,nch
+          do j=1,k
+            ipt = (i-1)*k + j
+            soln(ipt) = solncoefs(i)
+          enddo
+        enddo
+
 
       
+        eps = 1.0d-7
+        call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
+     1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
+     2    soln,pottarg_plot)
+      
+        do i=1,ntarg
+          potplot(i) = abs(pottarg_plot(i))
+        enddo
+        call pyimage4(34,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+
+      
+        do i=1,ntarg
+          potplot(i) = real(pottarg_plot(i))
+        enddo
+        call pyimage4(35,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+
+      
+        errmax = -16.0d0
+        do i=1,ntarg
+          potplot(i) =
+     1      log(abs(pottarg_plot(i)-pottargex_plot(i)))/log(10.0d0)
+          if(isin(i).eq.-4) then
+            if(potplot(i).ge.errmax) errmax = potplot(i)
+          endif
+        enddo
+        print *, "max log10 ext error=",errmax
+        call pyimage4(36,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+
+      endif
+      close(133)
+      
+
 
       return
       end
