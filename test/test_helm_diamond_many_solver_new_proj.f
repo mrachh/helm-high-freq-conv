@@ -5,13 +5,13 @@
 
       nks = 3
       nke = 3
-      ippws = 26
-      ippwe = 29
-      ifwrite = 1
-      ifplot = 0
+      ippws = 16
+      ippwe = 16
+      ifwrite = 0
+      ifplot = 1
       do ik=nks,nke
         do ippw=ippws,ippwe
-          call diamond_many(ik,ippw,ifwrite,iplot)
+          call diamond_many(ik,ippw,ifwrite,ifplot)
         enddo
       enddo
 
@@ -35,7 +35,7 @@
       complex *16, allocatable :: sigmag(:),sigmacoefsg(:),solncoefsg(:)
       complex *16, allocatable :: solng(:)
       complex *16, allocatable :: sigma(:),sigmacoefs(:),solncoefs(:)
-      complex *16, allocatable :: soln(:)
+      complex *16, allocatable :: soln(:),soln_use(:)
       complex *16, allocatable :: sigmacoefs_full(:),solncoefs_full(:)
       complex *16, allocatable :: sigmacoefsg_full(:),solncoefsg_full(:)
       integer, allocatable :: row_ptrg(:),col_indg(:),iquadg(:)
@@ -169,6 +169,9 @@ c      nch = 4*nch0*ncomp
       call get_diamond_many(nch0,ncomp,rsc,shifts,nch,
      1 nover,npts_over,adjs,srcover,
      1 srccoefsover,wover,novers,iptype,ixyso)
+
+      ra = sum(qwts)
+      print *, "ra=",ra
       
 
 
@@ -179,7 +182,7 @@ c      nch = 4*nch0*ncomp
       allocate(sigma(npts),sigmacoefs(nch),solncoefs(nch))
       allocate(sigmacoefs_full(npts),solncoefs_full(npts))
       allocate(sigmacoefsg_full(nptsg),solncoefsg_full(nptsg))
-      allocate(soln(npts))
+      allocate(soln(npts),soln_use(npts))
 
 c
 c  get density info
@@ -448,23 +451,22 @@ c      print *, "errq=",errq1
      1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
 
       
+      soln_use = 0
+      do i=1,nch
+        istart = (i-1)*k+1
+        call dgemm('n','t',2,k,k,alpha,solncoefs_full(istart),
+     1     2,vmat,k,beta,soln_use(istart),2)
+      enddo
+      
+        eps = 1.0d-7
+        call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
+     1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
+     2    soln_use,pottarg_plot)
+      
         do i=1,ntarg
-          potplot(i) = real(pottarg_plot(i))
+          potplot(i) = abs(pottarg_plot(i))
         enddo
         call pyimage4(35,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
-     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
-
-      
-        errmax = -16.0d0
-        do i=1,ntarg
-          potplot(i) =
-     1      log(abs(pottarg_plot(i)-pottargex_plot(i)))/log(10.0d0)
-          if(isin(i).eq.-4) then
-            if(potplot(i).ge.errmax) errmax = potplot(i)
-          endif
-        enddo
-        print *, "max log10 ext error=",errmax
-        call pyimage4(36,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
      1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
 
       endif
@@ -500,6 +502,7 @@ c      print *, "errq=",errq1
         if(ippw.eq.27) nch = 1296
         if(ippw.eq.28) nch = 1312
         if(ippw.eq.29) nch = 1328
+        if(ippw.eq.30) nch = 2832*2
       endif
 
       if(ik.eq.4) then
@@ -513,6 +516,9 @@ c      print *, "errq=",errq1
         if(ippw.eq.28) nch = 2496+16*6
         if(ippw.eq.29) nch = 2496+16*7
         if(ippw.eq.30) nch = 2496+16*8
+        if(ippw.eq.31) nch = 7136
+        if(ippw.eq.32) nch = 8000
+        if(ippw.eq.33) nch = 6256
       endif
 
 
