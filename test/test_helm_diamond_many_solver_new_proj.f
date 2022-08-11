@@ -3,15 +3,17 @@
       nk = 0
       nppw = 20
 
-      nks = 3
-      nke = 3
-      ippws = 16
+      nks = 2
+      nke = 6
+      ippws = 1
       ippwe = 16
-      ifwrite = 0
+      ifwrite = 1
       ifplot = 1
+      ithet = 5
       do ik=nks,nke
+        ntlat = 901 
         do ippw=ippws,ippwe
-          call diamond_many(ik,ippw,ifwrite,ifplot)
+          call diamond_many(ik,ippw,ifwrite,ifplot,ithet,ntlat)
         enddo
       enddo
 
@@ -20,7 +22,7 @@
       stop
       end
 
-      subroutine diamond_many(ik,ippw,ifwrite,ifplot)
+      subroutine diamond_many(ik,ippw,ifwrite,ifplot,ithet,ntlat)
 
 
       implicit real *8 (a-h,o-z)
@@ -64,6 +66,8 @@
       real *8 xy_in(2),xy_out(2)
       data ima/(0.0d0,1.0d0)/
       external circ_geom
+      character *300 fname_sol,fplot1,fplot2,fname4,fname_res,dir_name1
+      character *300 dir_name2
 
       
 
@@ -71,9 +75,13 @@
 
       done = 1.0d0
       pi = atan(done)*4
+      dir_name1 = 'diamond_data/'
+      dir_name2='/mnt/home/mrachh/ceph/helm-high-freq-conv/' //
+     1  'diamond-data/'
+      write(fname_res,'(a,a,i3.3,a)') trim(dir_name1),
+     1  'diamond_res_aug11_thet',ithet,'.txt'
 
-      open(unit=133,file='diamond_data/diamond_res_newproj2_thet5.txt',
-     1    access='append')
+      open(unit=133,file=trim(fname_res),access='append')
 
       zk = 100.0d0 + 0.0d0*ima
       zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
@@ -130,8 +138,7 @@ c
 c      nch0 = ceiling(0.4*4*abs(zk)/sqrt(2.0d0))*4
 c      nch = 4*nch0*ncomp
 
-      if(ippw.le.10) drat = 10 + ippw*1.5d0
-      if(ippw.gt.10) drat = 25 + (ippw-10)*2.5d0
+      if(ippw.le.20) drat = 25 + (ippw-1)*5.0d0
 
 
       nch0 = ceiling(drat*abs(zk)/4/ncomp)
@@ -139,6 +146,11 @@ c      nch = 4*nch0*ncomp
       if(ippw.gt.20) then
         call get_nch0_nch(ik,ippw,nch0,nch)
       endif
+      write(fname_sol,'(a,a,i1,a,i5.5,a,i3.3,a)') trim(dir_name2),
+     1   'sol_ik',ik,'_nch',nch,'_ithet',ithet,'.bin'
+      print *, trim(fname_sol)
+      print *, trim(fname_res)
+      open(unit=79,file=trim(fname_sol),form='unformatted')
 
       npts = nch*k
       npts_over = nch*nover
@@ -172,6 +184,10 @@ c      nch = 4*nch0*ncomp
 
       ra = sum(qwts)
       print *, "ra=",ra
+      nppw = floor(nch*2*pi/ra/abs(zk))
+      dppw = nch*2*pi/ra/abs(zk)
+      print *, "nppw=",nppw
+      print *, "dppw=",dppw
       
 
 
@@ -186,8 +202,8 @@ c      nch = 4*nch0*ncomp
 
 c
 c  get density info
-c
-      thet = 0.087d0
+
+      thet = ithet*2*pi/360.0d0
       do ich=1,nch
         sigmacoefsg(ich) = 0
         ra = 0
@@ -358,6 +374,24 @@ c      call prin2('solncoefsg_full=*',solncoefsg_full,2*kg+2)
 
       print *, "erra=",erra
       print *, "errq=",errq
+      write(79) ncomp
+      write(79) rsc(1:ncomp)
+      write(79) shifts(2,1:ncomp)
+      write(79) zk
+      write(79) nch0
+      write(79) nch
+      write(79) ithet
+      write(79) k
+      write(79) kg
+      write(79) nover
+      write(79) sigmacoefs
+      write(79) sigmacoefs_full
+      write(79) solncoefs
+      write(79) solncoefs_full
+      write(79) erra
+      write(79) errq
+
+
       
 c      nchuse0 = nch0
 c      nchuse = ncomp*4*nchuse0
@@ -371,7 +405,6 @@ c     2  solncoefs,kuse,nchuse0,nchuse,erra1,errq1,ifwrite,iunit)
 c      print *, "erra=",erra1
 c      print *, "errq=",errq1
        drat = (nch+0.0d0)/abs(zk)
-       dppw = 0
        if(ifwrite.eq.1) then
        write(133,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
      1     real(zk),
@@ -379,7 +412,6 @@ c      print *, "errq=",errq1
       endif
 
       if(ifplot.eq.1) then
-        ntlat = 601
         ntarg = ntlat*ntlat
 
         allocate(targs(2,ntarg))
@@ -409,6 +441,10 @@ c      print *, "errq=",errq1
              isin(i) = isin(i) + isin0(i)
            enddo
         enddo
+        write(79) ntlat
+        write(79) ntarg
+        write(79) targs
+        write(79) isin
 
         allocate(potplot(ntarg))
         do i=1,ntarg
@@ -418,8 +454,8 @@ c      print *, "errq=",errq1
         do i=1,ncomp
           nptcomp(i) = 4*nch0*k
         enddo
-        call pyimage4(33,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
-     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+c        call pyimage4(33,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+c     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
 
         allocate(pottarg_plot(ntarg),pottargex_plot(ntarg))
         allocate(ich_id(ntarg),ts_pts(ntarg))
@@ -443,12 +479,13 @@ c      print *, "errq=",errq1
         call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
      1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
      2    soln,pottarg_plot)
+        write(79) pottarg_plot
       
         do i=1,ntarg
           potplot(i) = abs(pottarg_plot(i))
         enddo
-        call pyimage4(34,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
-     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+c        call pyimage4(34,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+c     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
 
       
       soln_use = 0
@@ -462,15 +499,18 @@ c      print *, "errq=",errq1
         call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
      1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
      2    soln_use,pottarg_plot)
+        write(79) soln_use
+        write(79) pottarg_plot
       
         do i=1,ntarg
           potplot(i) = abs(pottarg_plot(i))
         enddo
-        call pyimage4(35,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
-     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+c        call pyimage4(35,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+c     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
 
       endif
       close(133)
+      close(79)
       
 
 
