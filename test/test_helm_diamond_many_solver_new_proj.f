@@ -1,11 +1,16 @@
       implicit real *8 (a-h,o-z)
 
-      nk = 4
+      nk = 0
       nppw = 20
+
+      nks = 3
+      nke = 3
+      ippws = 26
+      ippwe = 29
       ifwrite = 1
       ifplot = 0
-      do ik=0,nk
-        do ippw=1,nppw
+      do ik=nks,nke
+        do ippw=ippws,ippwe
           call diamond_many(ik,ippw,ifwrite,iplot)
         enddo
       enddo
@@ -67,7 +72,7 @@
       done = 1.0d0
       pi = atan(done)*4
 
-      open(unit=133,file='diamond_data/diamond_res_newproj2_thet10.txt',
+      open(unit=133,file='diamond_data/diamond_res_newproj2_thet5.txt',
      1    access='append')
 
       zk = 100.0d0 + 0.0d0*ima
@@ -128,8 +133,13 @@ c      nch = 4*nch0*ncomp
       if(ippw.le.10) drat = 10 + ippw*1.5d0
       if(ippw.gt.10) drat = 25 + (ippw-10)*2.5d0
 
+
       nch0 = ceiling(drat*abs(zk)/4/ncomp)
       nch = ncomp*nch0*4
+      if(ippw.gt.20) then
+        call get_nch0_nch(ik,ippw,nch0,nch)
+      endif
+
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
@@ -174,7 +184,7 @@ c      nch = 4*nch0*ncomp
 c
 c  get density info
 c
-      thet = 0.087d0*2
+      thet = 0.087d0
       do ich=1,nch
         sigmacoefsg(ich) = 0
         ra = 0
@@ -358,6 +368,7 @@ c     2  solncoefs,kuse,nchuse0,nchuse,erra1,errq1,ifwrite,iunit)
 c      print *, "erra=",erra1
 c      print *, "errq=",errq1
        drat = (nch+0.0d0)/abs(zk)
+       dppw = 0
        if(ifwrite.eq.1) then
        write(133,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
      1     real(zk),
@@ -461,5 +472,52 @@ c      print *, "errq=",errq1
       
 
 
+      return
+      end
+
+
+
+      subroutine get_nch0_nch(ik,ippw,nch0,nch)
+      implicit real *8 (a-h,o-z)
+      if(ik.eq.0) then
+        if(ippw.eq.21) nch = 512
+        if(ippw.eq.22) nch = 544
+      endif
+
+      if(ik.eq.2) then
+        if(ippw.eq.21) nch = 608
+        if(ippw.eq.22) nch = 640
+        if(ippw.eq.23) nch = 656
+      endif
+
+      if(ik.eq.3) then
+        if(ippw.eq.21) nch = 1232
+        if(ippw.eq.22) nch = 1264
+        if(ippw.eq.23) nch = 1184
+        if(ippw.eq.24) nch = 1200
+        if(ippw.eq.25) nch = 1216
+        if(ippw.eq.26) nch = 1280
+        if(ippw.eq.27) nch = 1296
+        if(ippw.eq.28) nch = 1312
+        if(ippw.eq.29) nch = 1328
+      endif
+
+      if(ik.eq.4) then
+        if(ippw.eq.21) nch = 2496-32
+        if(ippw.eq.22) nch = 2496-16
+        if(ippw.eq.23) nch = 2496+16
+        if(ippw.eq.24) nch = 2496+32
+        if(ippw.eq.25) nch = 2496+48
+        if(ippw.eq.26) nch = 2496+64
+        if(ippw.eq.27) nch = 2496+16*5
+        if(ippw.eq.28) nch = 2496+16*6
+        if(ippw.eq.29) nch = 2496+16*7
+        if(ippw.eq.30) nch = 2496+16*8
+      endif
+
+
+
+      nch0 = nch/16
+      
       return
       end
