@@ -3,16 +3,16 @@
       nk = 0
       nppw = 20
 
-      nks = 2
+      nks = 6
       nke = 6
-      ippws = 1
+      ippws = 3
       ippwe = 16
       ifwrite = 1
       ifplot = 1
       ithet = 5
       do ik=nks,nke
         ntlat = 901 
-        do ippw=ippws,ippwe
+        do ippw=ippws,ippwe,2
           call diamond_many(ik,ippw,ifwrite,ifplot,ithet,ntlat)
         enddo
       enddo
