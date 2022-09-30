@@ -737,54 +737,8 @@ c
 
 
 
-c
-c
-c
-c
-c
-c      subroutine load_cavity_zpars(a,b,m,zpars,ndz)
-c      implicit real *8 (a-h,o-z)
-c      complex *16 zpars(2*m)
-c      real *8, allocatable :: s(:),r(:),th(:),rho(:),z(:)
-c      complex *16, allocatable :: zwork(:)
-c      complex *16 ima
-c      data ima/(0.0d0,1.0d0)/
-c
-c      done = 1
-c      pi = atan(done)*4
-c
-c      ndz = 2*m
-c      lw = 10*ndz + 15
-c      allocate(s(m),r(m),th(m),rho(m),z(m))
-c      allocate(zwork(lw))
-c      call zffti(ndz,zwork)
-c      c = a
-c      hh = c/sqrt(2.0d0)
-c      aa = 1.0d0
-c      bb = 0.0d0
-c      do i=1,m
-c        s(i) = (i-0.5d0)/(m+0.0d0)*pi
-c        suse = (s(i)-pi/2)/a
-c        call qerrfun(suse,rr)
-c        r(i) = 1-a*rr
-c        suse = (s(i)-pi/2)
-c        call crn_fconvgauss(suse, aa, bb, hh, rr, tmp, tmp2)
-c        th(i) = (b-a) + 2*(1.0d0-(b-a)/pi)*rr
-c        rho(i) = r(i)*sin(th(i))
-c        z(i) = r(i)*cos(th(i))
-c      enddo
-c      do i=1,m
-c        zpars(i) = rho(i) + ima*z(i) 
-c        zpars(i+m) = -rho(m-i+1) + ima*(m-i+1)
-c      enddo
-c      call zfftf(ndz,zpars,wsave)
-c      do i=1,ndz
-c        zpars(i) = zpars(i)/(m+0.0d0)
-c      enddo
-c
-c
-c      return
-c      end
+
+
 
       subroutine get_circ_dens_error2(dpars,nch1,k1,npts1,solncoefs1,
      1   nch2,k2,npts2,solncoefs2,k3,nch3,erra,errq)
@@ -974,4 +928,108 @@ c
 
 
 
+
+
+
+
+      subroutine load_cavity_zpars(a,b,m,zpars,ndz)
+      implicit real *8 (a-h,o-z)
+      complex *16 zpars(2*m)
+      real *8, allocatable :: s(:),r(:),th(:),rho(:),z(:)
+      complex *16, allocatable :: zwork(:)
+      complex *16 ima
+      data ima/(0.0d0,1.0d0)/
+
+      done = 1
+      pi = atan(done)*4
+
+      ndz = 2*m
+      lw = 10*ndz + 15
+      print *, "ndz=",ndz
+      allocate(s(m),r(m),th(m),rho(m),z(m))
+      allocate(zwork(lw))
+      call zffti(ndz,zwork)
+      c = a
+      hh = c/sqrt(2.0d0)
+      aa = 1.0d0
+      bb = 0.0d0
+      do i=1,m
+        s(i) = (i-0.5d0)/(m+0.0d0)*pi
+        suse = (s(i)-pi/2)/a
+        call qerrfun(suse,rr)
+        r(i) = 1-a*rr
+        suse = (s(i)-pi/2)
+        call crn_fconvgauss(suse, aa, bb, hh, rr, tmp, tmp2)
+        th(i) = (b-a) + 2*(1.0d0-(b-a)/pi)*rr
+        rho(i) = r(i)*sin(th(i))
+        z(i) = r(i)*cos(th(i))*1.2d0
+
+        if(i.le.2) print *, th(i),rr,rho(i),z(i)
+      enddo
+
+      call prin2('z=*',z,8)
+      call prin2('rho=*',rho,8)
+      print *, "m=",m
+      do i=1,m
+        zpars(i) = rho(i) + ima*z(i) 
+        zpars(i+m) = -rho(m-i+1) + ima*z(m-i+1)
+      enddo
+      print *, rho(2)
+      print *, zpars(1:4)
+      stop
+
+      call zfftf(ndz,zpars,zwork)
+
+      call prin2('zpars=*',zpars,8)
+      stop
+      do i=1,ndz
+        zpars(i) = zpars(i)/(m+0.0d0)
+      enddo
+
+
+      return
+      end
+
+
+
+
+      subroutine funcurv_zfft(t,ndd,dpars,ndz,zpars,ndi,ipars,
+     1       srcinfo)
+      implicit real *8 (a-h,o-z)
+      real *8 dpars(ndd),srcinfo(8),t,pi,done
+      complex *16 zpars(ndz),z,zp,zpp,ima
+      integer ndd,ndz,ndi,iparss(ndi)
+      data ima/(0.0d0,1.0d0)/
+
+      done = 1.0d0
+      pi = atan(done)*4
+      m = ndz/2
+      z = 0
+      zp = 0
+      zpp = 0
+      do i=0,m
+        z = z + zpars(i+1)*exp(ima*i*t)
+        zp = zp + zpars(i+1)*exp(ima*i*t)*ima*(i+0.0d0)
+        zpp = zpp - zpars(i+1)*exp(ima*i*t)*(i+0.0d0)**2
+      enddo
+      do i=-m,-1
+        z = z + zpars(i+1+ndz)*exp(ima*i*t)
+        zp = zp + zpars(i+1+ndz)*exp(ima*i*t)*ima*(i+0.0d0)
+        zpp = zpp - zpars(i+1+ndz)*exp(ima*i*t)*(i+0.0d0)**2
+      enddo
+
+      srcinfo(1) = real(z)
+      srcinfo(2) = imag(z)
+      srcinfo(3) = real(zp)
+      srcinfo(4) = imag(zp)
+      srcinfo(5) = real(zpp)
+      srcinfo(6) = imag(zpp)
+
+      ds = sqrt(srcinfo(3)**2 + srcinfo(4)**2)
+      srcinfo(7) = srcinfo(4)/ds
+      srcinfo(8) = -srcinfo(3)/ds
+
+
+      return
+      end
 
