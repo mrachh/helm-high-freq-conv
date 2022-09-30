@@ -22,7 +22,7 @@ c      k = 10
       ndd_curv = 0
       ndi_curv = 0
 
-      allocate(zpars_curv(ndz))
+      allocate(zpars_curv(ndz_curv))
 
       aa = 0.2d0
       bb = pi/12

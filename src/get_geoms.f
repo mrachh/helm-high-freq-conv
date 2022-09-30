@@ -964,24 +964,16 @@ c
         rho(i) = r(i)*sin(th(i))
         z(i) = r(i)*cos(th(i))*1.2d0
 
-        if(i.le.2) print *, th(i),rr,rho(i),z(i)
       enddo
 
-      call prin2('z=*',z,8)
-      call prin2('rho=*',rho,8)
-      print *, "m=",m
       do i=1,m
         zpars(i) = rho(i) + ima*z(i) 
         zpars(i+m) = -rho(m-i+1) + ima*z(m-i+1)
       enddo
-      print *, rho(2)
-      print *, zpars(1:4)
-      stop
 
       call zfftf(ndz,zpars,zwork)
 
       call prin2('zpars=*',zpars,8)
-      stop
       do i=1,ndz
         zpars(i) = zpars(i)/(m+0.0d0)
       enddo
