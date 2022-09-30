@@ -109,7 +109,7 @@ c
       allocate(row_ptr(npts+1),col_ind(nnz),wnear(nquad))
       allocate(wnearcoefs(nquad))
 
-      call get_helm_dir_trid_quad_corr(zk,nch,k,k,npts,npts,ads,
+      call get_helm_dir_trid_quad_corr(zk,nch,k,k,npts,npts,adjs,
      1 srcinfo,srcinfo,ndz,zpars,nnz,row_ptr,col_ind,nquad,wnear,
      2 wnearcoefs)
 
