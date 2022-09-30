@@ -975,7 +975,7 @@ c
 
       call prin2('zpars=*',zpars,8)
       do i=1,ndz
-        zpars(i) = zpars(i)/(m+0.0d0)
+        zpars(i) = zpars(i)/(ndz+0.0d0)
       enddo
 
 
