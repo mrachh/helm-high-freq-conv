@@ -1,17 +1,27 @@
-function [ks,norms]=Galerkin()
 scale=2
-k=140
+k=160
 ppw=3;
-ks=[];
-norms=[];
-for j=1:3
-    ks=[ks,k];
-    norms=[norms,GalerkinRun(k,ppw)];
-    k=k+10;
-end
-plot(ks,norms)
 
+k0 = 20;
+nk = 20;
+dk = 20;
+ks = k0:dk:(k0+(nk-1)*dk);
+ks = ks.';
+norms =zeros(nk,1);
+
+tic;
+for j=1:nk
+    norms(j)=GalerkinRun(ks(j),ppw);
 end
+%plot(ks,norms)
+%
+fprintf('ks=%d\n',ks);
+fprintf('norms=%d\n',norms);
+toc;
+fname = ['Galerkin_nk_' int2str(nk) '_dk_' num2str(dk) '_k0_' num2str(k0) '.mat'];
+save(fname,'ks','norms');
+exit;
+
 
 function [n]=GalerkinRun(k,ppw)
 projection=true;
