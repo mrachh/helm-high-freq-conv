@@ -35,11 +35,11 @@
       pi = atan(done)*4
 
       zk = 100.0d0 + 0.0d0*ima
-      zk = 1280.0d0
-      zk = 1.0d0
+      zk = 1280.0d0*2
+cc      zk = 1.0d0
       ndz = 3
       zpars(1) = zk
-      zpars(2) = zk*0
+      zpars(2) = zk
 
       alpha = 1.0d0
       beta = 0.0d0
@@ -62,7 +62,7 @@ c
       call legeexps(itype,kg,tsg,umatg,vmatg,wtsg)
 
 
-      nch = 4000
+      nch = 4000*2
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg

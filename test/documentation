@@ -1,0 +1,13 @@
+test_cavity_domain.f: test analytic solution on the cavity domain
+test_crn.f: corner rounding code test
+test_diamond_domain.f: test geometric aspects of the 4 diamond domain
+test_err_est.f: estimate the error on the boundary of the circle
+
+
+*** final versions of solvers ***
+test_helm_diamond_many_solver_new_proj.f
+test_helm_cavity_solver_new_proj.f
+
+
+* not clear if the neumann solver works need to test better **
+

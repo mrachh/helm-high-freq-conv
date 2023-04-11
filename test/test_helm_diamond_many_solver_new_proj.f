@@ -425,7 +425,7 @@ c      print *, "errq=",errq1
           do iy=1,ntlat
             ipt = (ix-1)*ntlat + iy
             targs(1,ipt) = xmin + (xmax-xmin)*(ix-1.0d0)/(ntlat-1.0d0)
-            targs(2,ipt) = ymax + (ymin-ymax)*(iy-2.0d0)/(ntlat-1.0d0)
+            targs(2,ipt) = ymax + (ymin-ymax)*(iy-1.0d0)/(ntlat-1.0d0)
             isin(ipt) = 0
           enddo
         enddo

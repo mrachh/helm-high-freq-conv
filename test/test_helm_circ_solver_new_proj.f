@@ -1,27 +1,23 @@
       implicit real *8 (a-h,o-z)
 
-      nk = 0
-      nppw = 20
-
-      nks = 4 
-      nke = 4
-      ippws = 21
-      ippwe = 30
-      ifwrite = 1
-      ifplot = 0
-      do ik=nks,nke
-        do ippw=ippws,ippwe
-          call diamond_many(ik,ippw,ifwrite,iplot)
+      nk = 4
+      nppw = 1
+      ifwrite = 0
+      ifplot = 1
+      ntlatx = 2667
+      ntlaty = 2001
+      do ik=nk,nk
+        do ippw=nppw,nppw
+          call circle(ik,ippw,ifwrite,ifplot,ntlatx,ntlaty)
         enddo
       enddo
-
 
 
 
       stop
       end
 
-      subroutine diamond_many(ik,ippw,ifwrite,ifplot)
+      subroutine circle(ik,ippw,ifwrite,ifplot,ntlatx,ntlaty)
 
 
       implicit real *8 (a-h,o-z)
@@ -54,17 +50,19 @@
       integer, allocatable :: isin(:),isin0(:)
       complex *16, allocatable :: pottarg_plot(:),pottargex_plot(:)
       real *8, allocatable :: potplot(:)
+      complex *16, allocatable :: soln_use(:)
       real *8, allocatable :: xscat(:),yscat(:)
       integer, allocatable :: nptcomp(:)
       complex *16 zk,zpars(3),ima,z1,z2,ztmp
       complex *16 pottarg,pottargex
+      complex *16, allocatable :: charges(:),dipstr(:)
+      real *8, allocatable :: dipvec(:,:),sources(:,:)
       real *8 xyin(2),xyout(2)
-      real *8 dpars(1)
+      real *8 dpars(2)
       real *8, allocatable :: errs(:)
       complex *16 zfac
       real *8 xy_in(2),xy_out(2)
       data ima/(0.0d0,1.0d0)/
-      character *300 fname
       external circ_geom
 
       
@@ -74,13 +72,12 @@
       done = 1.0d0
       pi = atan(done)*4
 
-      fname = 'diamond_data/diamond_res_newproj2_impn_thet5.txt'
-      
-      open(unit=133,file=trim(fname),access='append')
+      open(unit=133,file='circ_data/circ_res_newproj2.txt',
+     1    access='append')
 
       zk = 100.0d0 + 0.0d0*ima
-      zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
-      if(ik.eq.0) zk = 25.0d0
+      zk = (10.0d0*2**(ik-1)) + 0.0d0
+      if(ik.eq.0) zk = 55.0d0
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
@@ -111,40 +108,15 @@ c
       itype = 1
       call legeexps(itype,nover,tover,umo,vmo,wtsover)
 
-      rfac = sqrt(2.0d0)
-      ncomp = 4
-      rsc(1) = 0.8d0*rfac*pi/2
-      rsc(2) = 0.8d0*rfac*pi/2
-      rsc(3) = 0.8d0*rfac*pi/2
-      rsc(4) = 0.8d0*rfac*pi/2
-
-      shifts(1,1) = rfac*pi
-      shifts(2,1) = rfac*pi
-
-      shifts(1,2) = rfac*pi
-      shifts(2,2) = -rfac*pi
-
-      shifts(1,3) = -rfac*pi
-      shifts(2,3) = rfac*pi
-
-      shifts(1,4) = -rfac*pi
-      shifts(2,4) = -rfac*pi
-
+      dpars(1) = 1.0d0
+      dpars(2) = 1.0d0
 c      nch0 = ceiling(0.4*4*abs(zk)/sqrt(2.0d0))*4
 c      nch = 4*nch0*ncomp
 
       if(ippw.le.10) drat = 10 + ippw*1.5d0
       if(ippw.gt.10) drat = 25 + (ippw-10)*2.5d0
 
-      nch0 = ceiling(drat*abs(zk)/4/ncomp)
-      nch = ncomp*nch0*4
-
-
-      if(ippw.gt.20) then
-        call get_nch0_nch(ik,ippw,nch0,nch)
-      endif
-
-
+      nch = ceiling(drat*abs(zk))
       npts = nch*k
       npts_over = nch*nover
       nptsg = nch*kg
@@ -162,18 +134,22 @@ c      nch = 4*nch0*ncomp
       allocate(novers(nch),ixyso(nch+1))
       allocate(tsover(npts_over))
 
-      print *, "nch0=",nch0
-      print *, "ncomp=",ncomp
-      print *, "nch=",nch
-      call get_diamond_many(nch0,ncomp,rsc,shifts,nch,
-     1 k,npts,adjs,srcinfo,srccoefs,
-     1 qwts,norders,iptype,ixys)
-      call get_diamond_many(nch0,ncomp,rsc,shifts,nch,
-     1 kg,nptsg,adjs,srcinfog,srccoefsg,
-     1 qwtsg,nordersg,iptype,ixysg)
-      call get_diamond_many(nch0,ncomp,rsc,shifts,nch,
-     1 nover,npts_over,adjs,srcover,
-     1 srccoefsover,wover,novers,iptype,ixyso)
+      ndd_curv = 2
+      ndz_curv = 0
+      ndi_curv = 0
+      a = 0
+      b = 2*pi
+      call get_funcurv_geom_uni(a,b,nch,k,npts,adjs,srcinfo,
+     1  srccoefs,ts1,qwts,norders,iptype,ixys,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+
+      call get_funcurv_geom_uni(a,b,nch,kg,nptsg,adjs,srcinfog,
+     1  srccoefsg,ts1g,qwtsg,nordersg,iptype,ixysg,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
+
+      call get_funcurv_geom_uni(a,b,nch,nover,npts_over,adjs,srcover,
+     1  srccoefsover,tsover,wover,novers,iptype,ixyso,circ_geom,
+     2  ndd_curv,dpars,ndz_curv,zpars,ndi_curv,ipars)
       
 
 
@@ -189,7 +165,7 @@ c      nch = 4*nch0*ncomp
 c
 c  get density info
 c
-      thet = 0.087d0
+      thet = 0.0d0
       do ich=1,nch
         sigmacoefsg(ich) = 0
         ra = 0
@@ -201,22 +177,6 @@ c
           ra = ra + qwtsg(ipt)
         enddo
         sigmacoefsg(ich) = sigmacoefsg(ich)/ra
-c
-c  compute i-pn and recompute sigmacoefsg
-c
-c
-
-        do j=1,kg
-          ipt = (ich-1)*kg + j
-          sigmag(ipt) = sigmag(ipt) - sigmacoefsg(ich)
-        enddo
-        sigmacoefsg(ich) = 0
-        do j=1,kg
-          ipt = (ich-1)*kg + j
-          sigmacoefsg(ich)=sigmacoefsg(ich) + sigmag(ipt)*qwtsg(ipt)
-        enddo
-        sigmacoefsg(ich) = sigmacoefsg(ich)/ra
-
         istart = (ich-1)*kg+1
         call dgemm('n','t',2,kg,kg,alpha,sigmag(istart),2,umatg,
      1     kg,beta,sigmacoefsg_full(istart),2)
@@ -233,28 +193,12 @@ c
           ra = ra + qwts(ipt)
         enddo
         sigmacoefs(ich) = sigmacoefs(ich)/ra
-
-        do j=1,k
-          ipt = (ich-1)*k + j
-          sigma(ipt) = sigma(ipt) - sigmacoefs(ich)
-        enddo
-        sigmacoefs(ich) = 0
-        do j=1,k
-          ipt = (ich-1)*k + j
-          sigmacoefs(ich) = sigmacoefs(ich) + sigma(ipt)*qwts(ipt)
-        enddo
-        sigmacoefs(ich) = sigmacoefs(ich)/ra
         istart = (ich-1)*k+1
         call dgemm('n','t',2,k,k,alpha,sigma(istart),2,umat,
      1     k,beta,sigmacoefs_full(istart),2)
       enddo
-      call prin2('sigmacoefsg=*',sigmacoefsg,24)
-      call prin2('sigmacoefs=*',sigmacoefs,24)
-
-      do i=1,nch
-        solncoefsg(i) = 0
-        solncoefs(i) = 0
-      enddo
+      call prin2_long('sigmacoefsg=*',sigmacoefsg,24)
+      call prin2_long('sigmacoefs=*',sigmacoefs,24)
 c
 
       nnz = 3*k*nch
@@ -307,12 +251,25 @@ C$       t2 = omp_get_wtime()
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
       iquadtype = 1
-      eps = 0.51d-5
+      eps = 0.51d-7
 
       niter = 0
       numit = max(ceiling(10*abs(zk)),200)
       allocate(errs(numit+1))
       ifinout = 1
+c      call helm_comb_dir_galerkin_solver2d_new_proj(nch,kg,ixysg,nptsg,
+c     1  srccoefsg,srcinfog,qwtsg,eps,zpars,nnzg,row_ptrg,col_indg,
+c     2  iquadg,
+c     2  nquadg,wnearg,novers(1),npts_over,ixyso,srcover,
+c     3  wover,numit,ifinout,sigmacoefsg,eps,niter,errs,rres,
+c     4  solncoefsg)
+
+      call helm_comb_dir_galerkin_solver2d_new_proj(nch,k,ixys,npts,
+     1  srccoefs,srcinfo,qwts,eps,zpars,nnz,row_ptr,col_ind,
+     2  iquad,
+     2  nquad,wnear,novers(1),npts_over,ixyso,srcover,
+     3  wover,numit,ifinout,sigmacoefs,eps,niter,errs,rres,
+     4  solncoefs)
 
 c      call helm_comb_dir_galerkin_solver2d(nch,kg,ixysg,nptsg,
 c     1  srcinfog,eps,zpars,nnzg,row_ptrg,col_indg,
@@ -380,19 +337,7 @@ c      call prin2('solncoefsg_full=*',solncoefsg_full,2*kg+2)
       print *, "erra=",erra
       print *, "errq=",errq
       
-c      nchuse0 = nch0
-c      nchuse = ncomp*4*nchuse0
-c      ifwrite = 0
-c      iunit = 39
-c      kuse = 2*k
-c
-c      call get_diamond_many_dens_error(ncomp,shifts,rsc,
-c     1  nch0,nch,k,npts,solncoefs_full,nch0,nch,1,nch,
-c     2  solncoefs,kuse,nchuse0,nchuse,erra1,errq1,ifwrite,iunit)
-c      print *, "erra=",erra1
-c      print *, "errq=",errq1
        drat = (nch+0.0d0)/abs(zk)
-       dppw = 0.0d0
        if(ifwrite.eq.1) then
        write(133,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
      1     real(zk),
@@ -400,51 +345,26 @@ c      print *, "errq=",errq1
       endif
 
       if(ifplot.eq.1) then
-        ntlat = 601
-        ntarg = ntlat*ntlat
+        ntarg = ntlatx*ntlaty
 
         allocate(targs(2,ntarg))
 
-        xmin = -10
-        xmax = 10
-        ymin = -10
-        ymax = 10
+        xmin = -4
+        xmax = 4
+        ymin = -3
+        ymax = 3
         allocate(isin(ntarg),isin0(ntarg))
-        do ix=1,ntlat
-          do iy=1,ntlat
-            ipt = (ix-1)*ntlat + iy
-            targs(1,ipt) = xmin + (xmax-xmin)*(ix-1.0d0)/(ntlat-1.0d0)
-            targs(2,ipt) = ymax + (ymin-ymax)*(iy-2.0d0)/(ntlat-1.0d0)
-            isin(ipt) = 0
+        do ix=1,ntlatx
+          do iy=1,ntlaty
+            ipt = (ix-1)*ntlaty + iy
+            targs(1,ipt) = xmin + (xmax-xmin)*(ix-1.0d0)/(ntlatx-1.0d0)
+            targs(2,ipt) = ymax + (ymin-ymax)*(iy-2.0d0)/(ntlaty-1.0d0)
           enddo
         enddo
 
 
-        do icomp=1,ncomp
-           istart = 4*k*nch0*(icomp-1)+1
-           nchuse = 4*nch0
-           npts0 = nchuse*k
-           call chunk_interior(nchuse,norders,ixys,iptype,npts0,
-     1        srcinfo(1,istart),srccoefs(1,istart),targs,2,ntarg,isin0)
-           do i=1,ntarg
-             isin(i) = isin(i) + isin0(i)
-           enddo
-        enddo
 
         allocate(potplot(ntarg))
-        do i=1,ntarg
-          potplot(i) = isin(i)
-        enddo
-        allocate(nptcomp(ncomp))
-        do i=1,ncomp
-          nptcomp(i) = 4*nch0*k
-        enddo
-
-
-
-        call pyimage4(33,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
-     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
-
         allocate(pottarg_plot(ntarg),pottargex_plot(ntarg))
         allocate(ich_id(ntarg),ts_pts(ntarg))
         do i=1,ntarg
@@ -453,98 +373,83 @@ c      print *, "errq=",errq1
           ich_id(i) = -1
           ts_pts(i) = 0
         enddo
-
+        allocate(charges(npts),dipvec(2,npts),dipstr(npts))
+        allocate(sources(2,npts))
         do i=1,nch
           do j=1,k
             ipt = (i-1)*k + j
             soln(ipt) = solncoefs(i)
+            charges(ipt) = zpars(2)*soln(ipt)*qwts(ipt)
+            dipstr(ipt) = zpars(3)*soln(ipt)*qwts(ipt)
+            dipvec(1,ipt) = srcinfo(7,ipt)
+            dipvec(2,ipt) = srcinfo(8,ipt)
+            sources(1,ipt) = srcinfo(1,ipt)
+            sources(2,ipt) = srcinfo(2,ipt)
           enddo
         enddo
+        ncomp = 1
+        allocate(nptcomp(ncomp))
+        nptcomp = npts
 
+        eps = 1.0d-7
+        call hfmm2d_t_cd_p(eps,zk,npts,sources,charges,dipstr,dipvec,
+     1     ntarg,targs,pottarg_plot,ier)  
+      
+c        call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
+c     1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
+c     2    soln,pottarg_plot)
+       
+       call prin2('pottarg_plot=*',pottarg_plot,24)
+      
+        ct = cos(thet)
+        st = sin(thet)
+        do i=1,ntarg
+          ztmp = exp(ima*zk*(targs(1,i)*ct + targs(2,i)*st))
+          potplot(i) = abs(ztmp-pottarg_plot(i))
+        enddo
+        call pyimage4(34,ntlaty,ntlatx,potplot,ncomp,srcinfo(1,1:npts),
+     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
 
+      allocate(soln_use(npts)) 
+      soln_use = 0
+      do i=1,nch
+        istart = (i-1)*k+1
+        call dgemm('n','t',2,k,k,alpha,solncoefs_full(istart),
+     1     2,vmat,k,beta,soln_use(istart),2)
+      enddo
+        do i=1,nch
+          do j=1,k
+            ipt = (i-1)*k + j
+            charges(ipt) = zpars(2)*soln_use(ipt)*qwts(ipt)
+            dipstr(ipt) = zpars(3)*soln_use(ipt)*qwts(ipt)
+            dipvec(1,ipt) = srcinfo(7,ipt)
+            dipvec(2,ipt) = srcinfo(8,ipt)
+            sources(1,ipt) = srcinfo(1,ipt)
+            sources(2,ipt) = srcinfo(2,ipt)
+          enddo
+        enddo
+        ncomp = 1
+cc       call prin2('soln_use=*',soln_use,2*npts)
       
         eps = 1.0d-7
-        call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
-     1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
-     2    soln,pottarg_plot)
+        call hfmm2d_t_cd_p(eps,zk,npts,sources,charges,dipstr,dipvec,
+     1     ntarg,targs,pottarg_plot,ier)  
       
+c        call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
+c     1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
+c     2    soln_use,pottarg_plot)
+        ct = cos(thet)
+        st = sin(thet)
         do i=1,ntarg
-          potplot(i) = abs(pottarg_plot(i))
+          ztmp = exp(ima*zk*(targs(1,i)*ct + targs(2,i)*st))
+          potplot(i) = abs(ztmp-pottarg_plot(i))
         enddo
-        call pyimage4(34,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
-     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
-
-      
-        do i=1,ntarg
-          potplot(i) = real(pottarg_plot(i))
-        enddo
-        call pyimage4(35,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
-     1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
-
-      
-        errmax = -16.0d0
-        do i=1,ntarg
-          potplot(i) =
-     1      log(abs(pottarg_plot(i)-pottargex_plot(i)))/log(10.0d0)
-          if(isin(i).eq.-4) then
-            if(potplot(i).ge.errmax) errmax = potplot(i)
-          endif
-        enddo
-        print *, "max log10 ext error=",errmax
-        call pyimage4(36,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+        call pyimage4(35,ntlaty,ntlatx,potplot,ncomp,srcinfo(1,1:npts),
      1    srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
 
       endif
+
       close(133)
-      
 
-
-      return
-      end
-
-
-
-      subroutine get_nch0_nch(ik,ippw,nch0,nch)
-      implicit real *8 (a-h,o-z)
-      if(ik.eq.0) then
-        if(ippw.eq.21) nch = 512
-        if(ippw.eq.22) nch = 544
-      endif
-
-      if(ik.eq.2) then
-        if(ippw.eq.21) nch = 608
-        if(ippw.eq.22) nch = 640
-        if(ippw.eq.23) nch = 656
-      endif
-
-      if(ik.eq.3) then
-        if(ippw.eq.21) nch = 1232
-        if(ippw.eq.22) nch = 1264
-        if(ippw.eq.23) nch = 1184
-        if(ippw.eq.24) nch = 1200
-        if(ippw.eq.25) nch = 1216
-        if(ippw.eq.26) nch = 1280
-        if(ippw.eq.27) nch = 1296
-        if(ippw.eq.28) nch = 1312
-        if(ippw.eq.29) nch = 1328
-      endif
-
-      if(ik.eq.4) then
-        if(ippw.eq.21) nch = 2496-32
-        if(ippw.eq.22) nch = 2496-16
-        if(ippw.eq.23) nch = 2496+16
-        if(ippw.eq.24) nch = 2496+32
-        if(ippw.eq.25) nch = 2496+48
-        if(ippw.eq.26) nch = 2496+64
-        if(ippw.eq.27) nch = 2496+16*5
-        if(ippw.eq.28) nch = 2496+16*6
-        if(ippw.eq.29) nch = 2496+16*7
-        if(ippw.eq.30) nch = 2496+16*8
-      endif
-
-
-
-      nch0 = nch/16
-      
       return
       end

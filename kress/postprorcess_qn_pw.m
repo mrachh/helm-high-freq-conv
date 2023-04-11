@@ -1,5 +1,5 @@
 addpath ./src/
-A = load('data_postproc_may8_2022_arclengthparam.mat');
+A = load('data_postproc_aug11_2022_arclengthparam.mat');
 
 % Plot rnorm inv, rnorm, err_pw, err_qnkqn for 
 % all geometry types, 
@@ -69,7 +69,7 @@ for ig=1:ng
         fig.PaperPositionMode = 'auto';
         fig_pos = fig.PaperPosition;
         fig.PaperSize = [fig_pos(3) fig_pos(4)];
-        saveas(gcf,join(['./results/geom' num2str(ig) '_isplit' num2str(isplit) '_may8_2022.pdf']));
+        saveas(gcf,join(['./results/geom' num2str(ig) '_isplit' num2str(isplit) '_aug11_2022.pdf']));
         
     end
 end

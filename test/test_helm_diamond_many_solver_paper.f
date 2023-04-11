@@ -48,7 +48,7 @@ c      k = 4
 c      nover = 10
 c      kref = k
 c      kref2 = k-2
-      nkd = 3
+      nkd = 1
       nppw = 20
 
       kerr = 32
@@ -65,7 +65,7 @@ c
       allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
       allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
       do ik=nkd,nkd
-       open(unit=133,file='diamond_data/diamond_res.txt',
+       open(unit=133,file='diamond_data/diamond_res3.txt',
      1    access='append')
         print *, "ik=",ik
         zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
@@ -297,7 +297,7 @@ c
       xyout(1) = 3.5d1
       xyout(2) = 3.3d1
 
-      thet = pi/4
+      thet = 0.087d0
 
 c
 c  get density info
