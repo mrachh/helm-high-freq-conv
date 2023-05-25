@@ -1,0 +1,8 @@
+*.mat
+*.pdf
+*.dat*
+*.sh
+*.o
+*pycache*
+*.out
+fort.*

@@ -64,7 +64,11 @@ c
 
       allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
       allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
+<<<<<<< HEAD
       do ik=1,1
+=======
+      do ik=nkd,nkd
+>>>>>>> 6aa2cfd71c91373892066b4860b3896e3e39c2a6
        open(unit=133,file='diamond_data/diamond_res3.txt',
      1    access='append')
         print *, "ik=",ik
@@ -297,7 +301,11 @@ c
       xyout(1) = 3.5d1
       xyout(2) = 3.3d1
 
+<<<<<<< HEAD
       thet = 0.087
+=======
+      thet = 0.087d0
+>>>>>>> 6aa2cfd71c91373892066b4860b3896e3e39c2a6
 
 c
 c  get density info

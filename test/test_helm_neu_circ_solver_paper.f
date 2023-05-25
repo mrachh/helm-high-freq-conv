@@ -20,7 +20,7 @@
       nover = 30
       kref = k
       kref2 = k-4
-      nkd = 6
+      nkd = 10
       nppw = 20
 
       kerr = 32
@@ -67,7 +67,7 @@ c
 
         do ippw=1,nppw
           print *, ippw
-          rexp = (ippw-1.0d0)/(nppw-1.0d0)/3.0d0
+          rexp = (ippw-1.0d0)/(nppw-1.0d0)/5.0d0
           dppw = 2*abs(zk)**rexp
           nch1 = ceiling(abs(zk)*dppw)
           k1 = 1
@@ -90,7 +90,7 @@ c
      1       err_dens(ippw,ik),err_q(ippw,ik))
            print *, "here2"
            drat = (nch1+0.0d0)/abs(zk)
-       write(33,'(2x,e11.5,2x,i4,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
+       write(33,'(2x,e11.5,1x,i5,3(2x,e11.5),2(2x,i4),2(2x,e11.5))') 
      1     real(zk),
      1     nch1,drat,dppw,err_est(ippw,ik),
      1     niter_analytic(ippw,ik),niter(ippw,ik),err_dens(ippw,ik),

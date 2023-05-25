@@ -17,6 +17,12 @@
       integer, allocatable :: nordersg(:)
       integer, allocatable :: novers(:),ixyso(:),adjs(:,:)
       real *8 shifts(2,100),rsc(100)
+      real *8, allocatable :: targs(:,:)
+      integer, allocatable :: isin(:),isin0(:)
+      complex *16, allocatable :: pottarg_plot(:),pottargex_plot(:)
+      real *8, allocatable :: potplot(:)
+      real *8, allocatable :: xscat(:),yscat(:)
+      integer, allocatable :: nptcomp(:)
       complex *16 zk,zpars(3),ima,z1,z2,ztmp
       complex *16 pottarg,pottargex
       real *8 xyin(2),xyout(2)
@@ -81,7 +87,7 @@ c
       shifts(1,4) = -rfac*pi
       shifts(2,4) = -rfac*pi
 
-      nch0 = ceiling(0.4*4*abs(zk)/sqrt(2.0d0))
+      nch0 = ceiling(0.4*4*abs(zk)/sqrt(2.0d0))*2
       nch = 4*nch0*ncomp
       npts = nch*k
       npts_over = nch*nover
@@ -130,14 +136,14 @@ c
 c
 c  get density info
 c
-      thet = pi/4
+      thet = 0.087d0
       do ich=1,nch
         do j=1,kg
           ipt = (ich-1)*kg + j
           call h2d_slp(srcinfog(1,ipt),2,xyin,ndd,dpars,1,zk,ndi,
      1       ipars,sigmag(ipt))
-c          sigmag(ipt) = exp(ima*zk*(srcinfog(1,ipt)*cos(thet)+ 
-c     1         srcinfog(2,ipt)*sin(thet)))
+          sigmag(ipt) = exp(ima*zk*(srcinfog(1,ipt)*cos(thet)+ 
+     1         srcinfog(2,ipt)*sin(thet)))
           solncoefsg(ipt) = 0.0d0
         enddo
         istart = (ich-1)*kg + 1
@@ -212,8 +218,91 @@ C$       t2 = omp_get_wtime()
       call prin2_long('pottarg=*',pottarg,2)
       call prin2_long('pottargex=*',pottargex,2)
       print *, "erra=",abs(pottarg-pottargex)/abs(pottargex)
+
+      ntlat = 601
+      ntarg = ntlat*ntlat
+
+      allocate(targs(2,ntarg))
+
+      xmin = -10
+      xmax = 10
+      ymin = -10
+      ymax = 10
+      allocate(isin(ntarg),isin0(ntarg))
+      do ix=1,ntlat
+        do iy=1,ntlat
+          ipt = (ix-1)*ntlat + iy
+          targs(1,ipt) = xmin + (xmax-xmin)*(ix-1.0d0)/(ntlat-1.0d0)
+          targs(2,ipt) = ymax + (ymin-ymax)*(iy-2.0d0)/(ntlat-1.0d0)
+          isin(ipt) = 0
+        enddo
+      enddo
+
+
+      do icomp=1,ncomp
+         istart = 4*k*nch0*(icomp-1)+1
+         nchuse = 4*nch0
+         npts0 = nchuse*k
+         call chunk_interior(nchuse,norders,ixys,iptype,npts0,
+     1      srcinfo(1,istart),srccoefs(1,istart),targs,2,ntarg,isin0)
+         do i=1,ntarg
+           isin(i) = isin(i) + isin0(i)
+         enddo
+      enddo
+
+      allocate(potplot(ntarg))
+      do i=1,ntarg
+        potplot(i) = isin(i)
+      enddo
+      allocate(nptcomp(ncomp))
+      do i=1,ncomp
+        nptcomp(i) = 4*nch0*k
+      enddo
+      call pyimage4(33,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+     1  srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+
+      allocate(pottarg_plot(ntarg),pottargex_plot(ntarg))
+      allocate(ich_id(ntarg),ts_pts(ntarg))
+      do i=1,ntarg
+        call h2d_slp(targs(1,i),2,xyin,ndd,dpars,1,zk,ndi,ipars,
+     1     pottargex_plot(i))
+          ich_id(i) = -1
+          ts_pts(i) = 0
+      enddo
       
-       
+      eps = 1.0d-7
+      call lpcomp_helm_comb_dir_2d(nch,nordersg,ixysg,iptype,nptsg,
+     1  srccoefsg,srcinfog,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
+     2  solng,pottarg_plot)
+      
+      do i=1,ntarg
+        potplot(i) = abs(pottarg_plot(i))
+      enddo
+      call pyimage4(34,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+     1  srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+
+      
+      do i=1,ntarg
+        potplot(i) = real(pottarg_plot(i))
+      enddo
+      call pyimage4(35,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+     1  srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+
+      
+      errmax = -16.0d0
+      do i=1,ntarg
+        potplot(i) =
+     1    log(abs(pottarg_plot(i)-pottargex_plot(i)))/log(10.0d0)
+        if(isin(i).eq.-4) then
+          if(potplot(i).ge.errmax) errmax = potplot(i)
+        endif
+      enddo
+      print *, "max log10 ext error=",errmax
+      call pyimage4(36,ntlat,ntlat,potplot,ncomp,srcinfo(1,1:npts),
+     1  srcinfo(2,1:npts),nptcomp,xmin,xmax,ymin,ymax,5)
+
+
+      
 
       return
       end
