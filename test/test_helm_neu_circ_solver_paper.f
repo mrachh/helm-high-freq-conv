@@ -20,7 +20,7 @@
       nover = 30
       kref = k
       kref2 = k-4
-      nkd = 8
+      nkd = 6
       nppw = 20
 
       kerr = 32
@@ -36,8 +36,8 @@ c
 
       allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
       allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
-      open(unit=33,file='circ_neu_data/circ_res.txt',access='append')
-      do ik=nkd,nkd
+      open(unit=33,file='circ_neu_data/circ_res2.txt',access='append')
+      do ik=1,nkd
         print *, "ik=",ik
         zk = 10.0d0*2**(ik-1) + 0.0d0
         nchref = ceiling(abs(zk))*4
@@ -158,7 +158,7 @@ c
 
       ndz = 3
       zpars(1) = zk
-      zpars(2) = -ima*zk
+      zpars(2) = -zk
 
       alpha = 1.0d0
       beta = 0.0d0

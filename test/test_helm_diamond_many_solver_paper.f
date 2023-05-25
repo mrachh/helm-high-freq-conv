@@ -48,7 +48,7 @@ c      k = 4
 c      nover = 10
 c      kref = k
 c      kref2 = k-2
-      nkd = 3
+      nkd = 6
       nppw = 20
 
       kerr = 32
@@ -64,8 +64,8 @@ c
 
       allocate(err_est(nppw,nkd),err_dens(nppw,nkd),err_q(nppw,nkd))
       allocate(niter(nppw,nkd),niter_analytic(nppw,nkd))
-      do ik=nkd,nkd
-       open(unit=133,file='diamond_data/diamond_res.txt',
+      do ik=1,1
+       open(unit=133,file='diamond_data/diamond_res3.txt',
      1    access='append')
         print *, "ik=",ik
         zk = (10.0d0*2**(ik-1))*sqrt(2.0d0) + 0.0d0
@@ -114,7 +114,7 @@ c
 
         do ippw=1,nppw
           print *, ippw
-          rexp = (ippw-1.0d0)/(nppw-1.0d0)*0.5d0
+          rexp = (ippw-1.0d0)/(nppw-1.0d0)*0.4d0
           dppw = 2*abs(zk)**rexp
           nch10 = ceiling(0.4d0*dppw*abs(zk)/sqrt(2.0d0))
           nch1 = ncomp*nch10*4
@@ -297,7 +297,7 @@ c
       xyout(1) = 3.5d1
       xyout(2) = 3.3d1
 
-      thet = pi/4
+      thet = 0.087
 
 c
 c  get density info
@@ -359,8 +359,8 @@ C$       t2 = omp_get_wtime()
       call get_iquad_rsc2d(nch,ixysg,nptsg,nnzg,row_ptrg,col_indg,
      1   iquadg)
       iquadtype = 1
-      eps = 0.51d-9
-      eps_gmres = 0.51d-9
+      eps = 0.51d-6
+      eps_gmres = 0.51d-6
 
       niter = 0
       numit = max(ceiling(10*abs(zk)),200)

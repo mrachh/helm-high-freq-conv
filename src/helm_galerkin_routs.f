@@ -2291,3 +2291,457 @@ c
 c
 c
 c
+
+      subroutine get_linear_proj(nd,k,ts,vals,qwts,vcoefs)
+c
+c  this subroutine evaluates the linear projection of a function
+c  on an interval not parameterized by unit speed
+c
+c  Input arguments:
+c    - k: integer
+c        number of points on the panel
+c    - ts: real *8 (k)
+c        legendre nodes of order k
+c    - vals: real *8 (nd,k)
+c        values of the functions at the legendre nodes
+c    - qwts: real *8 (k)
+c        quadrature weights for integrating smooth functions
+c
+c  Output arguments:
+c    - vcoefs: real *8 (nd,2)
+c        coeffs of the linear projection
+c       
+c
+      implicit real *8 (a-h,o-z)
+      integer, intent(in) :: nd,k
+      real *8, intent(in) :: ts(k),vals(nd,k),qwts(k)
+      real *8, intent(out) :: vcoefs(nd,2)
+
+      real *8 amat(2,2),amatinv(2,2),rhs(nd,2)
+
+      amat(1,1) = 0
+      amat(2,1) = 0
+      amat(1,2) = 0
+      amat(2,2) = 0
+
+      amatinv(1,1) = 0
+      amatinv(2,1) = 0
+      amatinv(1,2) = 0
+      amatinv(2,2) = 0
+
+      do idim=1,nd
+        rhs(idim,1) = 0
+        rhs(idim,2) = 0
+      enddo
+
+      do i=1,k
+        amat(1,1) = amat(1,1) + qwts(i)
+        amat(2,1) = amat(2,1) + ts(i)*qwts(i)
+        amat(2,2) = amat(2,2) + ts(i)**2*qwts(i)
+
+        do idim=1,nd
+          rhs(idim,1) = rhs(idim,1) + vals(idim,i)*qwts(i)
+          rhs(idim,2) = rhs(idim,2) + vals(idim,i)*ts(i)*qwts(i)
+        enddo
+      enddo
+
+      amat(1,2) = amat(2,1)
+      adet = amat(2,2)*amat(1,1) - amat(1,2)*amat(2,1)
+      
+      amatinv(1,1) = amat(2,2)/adet
+      amatinv(2,2) = amat(1,1)/adet
+      amatinv(1,2) = -amat(1,2)/adet
+      amatinv(2,1) = -amat(2,1)/adet
+
+      do idim=1,nd
+        vcoefs(idim,1) = amatinv(1,1)*rhs(idim,1) + 
+     1      amatinv(1,2)*rhs(idim,2)
+        vcoefs(idim,2) = amatinv(2,1)*rhs(idim,1) + 
+     1      amatinv(2,2)*rhs(idim,2)
+      enddo
+
+
+      return
+      end
+c        
+c
+c
+c
+c
+      subroutine lpcomp_galerkin_helm2d_new_proj_lin(nch,k,ixys,npts,
+     1  srccoefs,srcvals,qwts,eps,zpars,nnz,row_ptr,
+     2  col_ind,iquad,nquad,wnear,sigmacoefs,nover,
+     3  nptso,ixyso,srcover,whtsover,potcoefs)
+c
+c  This subroutine evaluates the helmholtz combined field
+c  layer potential in the Galerkin formulation
+c
+c
+      implicit real *8 (a-h,o-z)
+      integer nch,k,ixys(nch+1),npts
+      real *8 srcvals(8,npts),eps
+      real *8 srccoefs(6,npts),qwts(npts)
+      integer npts1
+      complex *16 zpars(3)
+      integer nnz,row_ptr(npts+1),col_ind(nnz),iquad(nnz+1)
+      integer nquad
+      complex *16 wnear(nquad),sigmacoefs(2,nch)
+      integer nover,nptso,ixyso(nch+1)
+      real *8 srcover(8,nptso),whtsover(nptso)
+      complex *16 potcoefs(2,nch),ztmp
+
+      complex *16, allocatable :: sigma(:),pot(:)
+      integer, allocatable :: norders(:),iptype(:),novers(:)
+      real *8, allocatable :: ts(:),wts(:),umat(:,:),vmat(:,:)
+
+      allocate(ts(k),wts(k),umat(k,k),vmat(k,k))
+      itype = 2
+      call legeexps(itype,k,ts,umat,vmat,wts)
+
+      allocate(sigma(npts),pot(npts))
+
+      do i=1,nch
+        do j=1,k
+          ipt = (i-1)*k + j
+          sigma(ipt) = sigmacoefs(1,i) + sigmacoefs(2,i)*ts(j)
+        enddo
+      enddo
+
+      allocate(norders(nch),iptype(nch),novers(nch))
+
+      do i=1,nch
+        norders(i) = k
+        iptype(i) = 1
+        novers(i) = nover
+      enddo
+
+      call lpcomp_helm_comb_dir_addsub_2d(nch,norders,ixys,
+     1  iptype,npts,srccoefs,srcvals,8,npts,srcvals,eps,
+     2  zpars,nnz,row_ptr,col_ind,iquad,nquad,wnear,sigma,
+     3  novers,nptso,ixyso,srcover,whtsover,pot)
+c
+c
+c  project back pot
+c
+      do i=1,nch
+        potcoefs(1,i) = 0
+        potcoefs(2,i) = 0
+        ii = (i-1)*k+1
+        call get_linear_proj(2,k,ts,pot(ii),qwts(ii),potcoefs(1,i))
+      enddo
+
+
+      return
+      end
+
+
+c
+c
+c
+c
+c
+c
+c
+c
+c
+
+      subroutine helm_comb_dir_galerkin_solver2d_new_proj_lin(nch,k,
+     1    ixys,npts,srccoefs,srcvals,qwts,eps,zpars,nnz,row_ptr,
+     1    col_ind,iquad,
+     2    nquad,wnear,nover,npts_over,ixyso,srcover,wover,
+     2    numit,ifinout,rhscoefs,eps_gmres,niter,errs,rres,solncoefs)
+c
+c  Solve the Helmholtz boundary value problem using the combined 
+c  field integral equation
+c
+c  .. math ::
+c  
+c      u = (\alpha \mathcal{S}_{k} + \beta \mathcal{D}_{k})
+c
+c  Same ordered chunks, and same order oversampling
+c
+c  Input arguments:
+c    - nch: integer
+c        number of chunks
+c    - k: integer
+c        order of discretization
+c    - ixys: integer(nch+1)
+c        starting location of data on patch i
+c    - npts: integer
+c        total number of discretization points on the boundary
+c    - srcvals: real *8 (8,npts)
+c        x,y,dxdt,dydt,dxdt2,dydt2,rnx,rny at the discretization nodes
+c    - eps: real *8
+c        precision requested
+c    - zpars: complex *16 (3)
+c        kernel parameters (Referring to formula (1))
+c        zpars(1) = k 
+c        zpars(2) = alpha
+c        zpars(3) = beta
+c    - nnz: integer
+c        number of non-zero entries in quadrature correction array
+c    - row_ptr: integer(npts+1)
+c        row_ptr(i) is the pointer to col_ind array where list of 
+c        relevant source patches for target i start
+c    - col_ind: integer (nnz)
+c        list of source patches relevant for all targets, sorted
+c        by the target number
+c    - iquad: integer(nnz+1)
+c        location in wnear array where quadrature for col_ind(i)
+c        starts
+c    - nquad: integer
+c        number of entries in wnear
+c    - wnear: complex *16 (nquad)
+c        quadrature corrections
+c    - nover: integer
+c        oversampling parameter
+c    - npts_over: integer
+c        total number of oversampled points
+c    - ixyso: integer(nch+1)
+c        starting location for oversampled data
+c    - srcover: real *8 (8,npts_over)
+c        total number of oversampled points
+c    - wover: real *8(npts_over)
+c        oversampled smooth quadrature weights
+c        
+c    - numit: integer
+c        max number of gmres iterations
+c    - ifinout: integer
+c        flag for interior or exterior problems (normals assumed to 
+c        be pointing in exterior of region)
+c        * ifinout = 0, interior problem
+c        * ifinout = 1, exterior problem
+c    - rhscoefs: complex *16(2*nch)
+c        right hand side
+c    - eps_gmres: real *8
+c        gmres tolerance requested
+c 
+c  Output arguments:
+c    - niter: integer
+c        number of gmres iterations required for relative residual
+c    - errs: real *8 (1:niter)
+c        relative residual as a function of iteration number
+c    - rres: real *8
+c        relative residual for computed solution
+c    - solncoefs: complex *16(2*nch)
+c        density which solves the dirichlet problem
+c-----------------------------------
+c
+      implicit none
+      integer nch,k,npts,ixys(nch+1)
+      real *8 srcvals(8,npts),eps,eps_gmres
+      real *8 srccoefs(6,npts),qwts(npts)
+      complex *16 zpars(3)
+      complex *16 rhscoefs(2*nch)
+      complex *16 solncoefs(2*nch)
+      integer nnz,row_ptr(npts+1),col_ind(nnz),iquad(nnz+1)
+      integer nquad
+      complex *16 wnear(nquad)
+      integer nover,npts_over,ixyso(nch+1)
+      real *8 srcover(8,npts_over),wover(npts_over)
+      integer numit,ifinout
+
+
+      real *8 errs(numit+1)
+      real *8 rres,eps2
+      integer niter
+
+
+      integer i,j,jpatch,jquadstart,jstart
+
+      integer ipars
+      real *8 dpars,timeinfo(10),t1,t2,omp_get_wtime
+      real *8 ttot,done,pi
+
+c
+c
+c       gmres variables
+c
+      complex *16 zid,ztmp
+      real *8 rb,wnrm2
+      integer it,iind,it1,l
+      real *8 rmyerr
+      complex *16 temp
+      complex *16, allocatable :: vmat(:,:),hmat(:,:)
+      complex *16, allocatable :: cs(:),sn(:)
+      complex *16, allocatable :: svec(:),yvec(:),wtmp(:)
+      integer nsys
+
+
+      nsys = 2*nch
+      allocate(vmat(nsys,numit+1),hmat(numit,numit))
+      allocate(cs(numit),sn(numit))
+      allocate(wtmp(nsys),svec(numit+1),yvec(numit+1))
+
+
+      done = 1
+      pi = atan(done)*4
+
+c
+c
+c     start gmres code here
+c
+c     NOTE: matrix equation should be of the form (z*I + K)x = y
+c       the identity scaling (z) is defined via zid below,
+c       and K represents the action of the principal value 
+c       part of the matvec
+c
+      zid = -(-1)**(ifinout)*zpars(3)/2
+
+
+      niter=0
+
+c
+c      compute norm of right hand side and initialize v
+c 
+      rb = 0
+
+      do i=1,numit
+        cs(i) = 0
+        sn(i) = 0
+      enddo
+
+
+c
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:rb)
+      do i=1,nsys
+        rb = rb + abs(rhscoefs(i))**2
+      enddo
+C$OMP END PARALLEL DO      
+      rb = sqrt(rb)
+
+C$OMP PARALLEL DO DEFAULT(SHARED)
+      do i=1,nsys
+        vmat(i,1) = rhscoefs(i)/rb
+      enddo
+C$OMP END PARALLEL DO      
+      svec(1) = rb
+
+      do it=1,numit
+        it1 = it + 1
+
+c
+c        NOTE:
+c        replace this routine by appropriate layer potential
+c        evaluation routine  
+c
+
+
+        call lpcomp_galerkin_helm2d_new_proj_lin(nch,k,ixys,npts,
+     1    srccoefs,srcvals,qwts,eps,zpars,nnz,row_ptr,col_ind,iquad,
+     2    nquad,wnear,vmat(1,it),nover,npts_over,ixyso,
+     3    srcover,wover,wtmp)
+
+        do l=1,it
+          ztmp = 0
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:ztmp)          
+          do j=1,nsys
+            ztmp = ztmp + wtmp(j)*conjg(vmat(j,l))
+          enddo
+C$OMP END PARALLEL DO          
+          hmat(l,it) = ztmp
+
+C$OMP PARALLEL DO DEFAULT(SHARED) 
+          do j=1,nsys
+            wtmp(j) = wtmp(j)-hmat(l,it)*vmat(j,l)
+          enddo
+C$OMP END PARALLEL DO          
+        enddo
+          
+        hmat(it,it) = hmat(it,it)+zid
+        wnrm2 = 0
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:wnrm2)        
+        do j=1,nsys
+          wnrm2 = wnrm2 + abs(wtmp(j))**2
+        enddo
+C$OMP END PARALLEL DO        
+        wnrm2 = sqrt(wnrm2)
+
+C$OMP PARALLEL DO DEFAULT(SHARED) 
+        do j=1,nsys
+          vmat(j,it1) = wtmp(j)/wnrm2
+        enddo
+C$OMP END PARALLEL DO        
+
+        do l=1,it-1
+          temp = cs(l)*hmat(l,it)+conjg(sn(l))*hmat(l+1,it)
+          hmat(l+1,it) = -sn(l)*hmat(l,it)+cs(l)*hmat(l+1,it)
+          hmat(l,it) = temp
+        enddo
+
+        ztmp = wnrm2
+
+        call zrotmat_gmres2d(hmat(it,it),ztmp,cs(it),sn(it))
+          
+        hmat(it,it) = cs(it)*hmat(it,it)+conjg(sn(it))*wnrm2
+        svec(it1) = -sn(it)*svec(it)
+        svec(it) = cs(it)*svec(it)
+        rmyerr = abs(svec(it1))/rb
+        errs(it) = rmyerr
+        print *, "iter=",it,errs(it)
+
+        if(rmyerr.le.eps_gmres.or.it.eq.numit) then
+
+c
+c            solve the linear system corresponding to
+c            upper triangular part of hmat to obtain yvec
+c
+c            y = triu(H(1:it,1:it))\s(1:it);
+c
+          do j=1,it
+            iind = it-j+1
+            yvec(iind) = svec(iind)
+            do l=iind+1,it
+              yvec(iind) = yvec(iind) - hmat(iind,l)*yvec(l)
+            enddo
+            yvec(iind) = yvec(iind)/hmat(iind,iind)
+          enddo
+
+
+
+c
+c          estimate x
+c
+C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j)
+          do j=1,nsys
+            solncoefs(j) = 0
+            do i=1,it
+              solncoefs(j) = solncoefs(j) + yvec(i)*vmat(j,i)
+            enddo
+          enddo
+C$OMP END PARALLEL DO          
+
+
+          rres = 0
+C$OMP PARALLEL DO DEFAULT(SHARED)          
+          do i=1,nsys
+            wtmp(i) = 0
+          enddo
+C$OMP END PARALLEL DO          
+c
+c        NOTE:
+c        replace this routine by appropriate layer potential
+c        evaluation routine  
+c
+
+        call lpcomp_galerkin_helm2d_new_proj_lin(nch,k,ixys,npts,
+     1    srccoefs,srcvals,qwts,eps,zpars,nnz,row_ptr,col_ind,iquad,
+     2    nquad,wnear,solncoefs,nover,npts_over,ixyso,
+     3    srcover,wover,wtmp)
+
+C$OMP PARALLEL DO DEFAULT(SHARED) REDUCTION(+:rres)            
+          do i=1,nsys
+            rres = rres + abs(zid*solncoefs(i) + wtmp(i)-rhscoefs(i))**2
+          enddo
+C$OMP END PARALLEL DO          
+          rres = sqrt(rres)/rb
+          niter = it
+          return
+        endif
+      enddo
+c
+      return
+      end
+c
+c
+c

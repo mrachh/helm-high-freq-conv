@@ -3,15 +3,15 @@
       nk = 0
       nppw = 20
 
-      nks = 1
-      nke = 1
-      ippws = 1
-      ippwe = 16
+      nks = 11
+      nke = 11
+      ippws = 400
+      ippwe = 600
       ifwrite = 1
       ifplot = 1
       do ik=nks,nke
         ntlat = 901 
-        do ippw=ippws,ippwe
+        do ippw=ippws,ippwe,100
           call cavity(ik,ippw,ifwrite,ifplot,ntlat)
         enddo
       enddo
@@ -81,11 +81,20 @@
       dir_name2='/mnt/home/mrachh/ceph/helm-high-freq-conv/' //
      1  'cavity-data/'
       write(fname_res,'(a,a)') trim(dir_name1),
-     1  'cavity_res_sep30.txt'
+     1  'cavity_res_oct5_pw_mpi2p0p2.txt'
 
       open(unit=133,file=trim(fname_res),access='append')
 
-      zk = 10.0d0*ik + ima*0.0d0
+      zk = 20.0d0*ik + ima*0.0d0
+
+      if(ik.eq.5) zk = 30.635d0
+      if(ik.eq.6) zk = 37.212733389d0
+cc      if(ik.eq.6) zk = 37.212d0
+      if(ik.eq.7) zk = 47.02d0
+      if(ik.eq.8) zk = 56.69d0
+      if(ik.eq.9) zk = 69.73d0
+      if(ik.eq.10) zk = 160.0d0
+      if(ik.eq.11) zk = 64.5386641434d0
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
@@ -116,10 +125,10 @@ c
       itype = 1
       call legeexps(itype,nover,tover,umo,vmo,wtsover)
 
-      nch = ceiling(2*pi*abs(zk)*13.14d0*(2+0.5*ippw))
+      nch = ceiling(abs(zk)*13.14d0*(2+0.5*ippw)/2/pi)
 
       write(fname_sol,'(a,a,i1,a,i5.5,a)') trim(dir_name2),
-     1   'sol_ik',ik,'_nch',nch,'.bin'
+     1   'sol_ik',ik,'_nch',nch,'_pw_mpi2p0p2.bin'
       print *, trim(fname_sol)
       print *, trim(fname_res)
       open(unit=79,file=trim(fname_sol),form='unformatted')
@@ -191,8 +200,10 @@ c
 c  get density info
       
       s0 = 1.0d0/sqrt(real(zk))
-      thet = 0.45d0*pi
+      thet = 0.35d0*pi
       ttuse = 0.3913220708069514D+01
+
+      thet = -pi/2 + 0.2d0
 
       
       do ich=1,nch
@@ -200,8 +211,8 @@ c  get density info
         ra = 0
         do j=1,kg
           ipt = (ich-1)*kg + j
-          sigmag(ipt) = exp(-(ts1g(ipt)-ttuse)**2/s0**2)*
-     1       exp(ima*zk*cos(thet)*ts1g(ipt))
+          sigmag(ipt) = exp(ima*zk*(srcinfog(1,ipt)*cos(thet)+ 
+     1         srcinfog(2,ipt)*sin(thet)))
           sigmacoefsg(ich) = sigmacoefsg(ich) + sigmag(ipt)*qwtsg(ipt)
           ra = ra + qwtsg(ipt)
         enddo
@@ -211,13 +222,14 @@ c  get density info
      1     kg,beta,sigmacoefsg_full(istart),2)
       enddo
 
+
       do ich=1,nch
         sigmacoefs(ich) = 0
         ra  = 0
         do j=1,k
           ipt = (ich-1)*k + j
-          sigmag(ipt) = exp(-(ts1(ipt)-ttuse)**2/s0**2)*
-     1       exp(ima*zk*cos(thet)*ts1(ipt))
+          sigma(ipt) = exp(ima*zk*(srcinfo(1,ipt)*cos(thet)+ 
+     1         srcinfo(2,ipt)*sin(thet)))
           sigmacoefs(ich) = sigmacoefs(ich) + sigma(ipt)*qwts(ipt)
           ra = ra + qwts(ipt)
         enddo
@@ -226,8 +238,6 @@ c  get density info
         call dgemm('n','t',2,k,k,alpha,sigma(istart),2,umat,
      1     k,beta,sigmacoefs_full(istart),2)
       enddo
-      call prin2('sigmacoefsg=*',sigmacoefsg,24)
-      call prin2('sigmacoefs=*',sigmacoefs,24)
 c
 
       nnz = 3*k*nch
@@ -433,6 +443,8 @@ c      call prin2('solncoefsg_full=*',solncoefsg_full,2*kg+2)
           potplot(i) = abs(pottarg_plot(i))
         enddo
 
+c        call pyimage4(35,ntlat,ntlat,potplot,1,srcinfo(1,1:npts),
+c     1    srcinfo(2,1:npts),npts,xmin,xmax,ymin,ymax,5)
       
       soln_use = 0
       do i=1,nch
@@ -451,6 +463,8 @@ c      call prin2('solncoefsg_full=*',solncoefsg_full,2*kg+2)
         do i=1,ntarg
           potplot(i) = abs(pottarg_plot(i))
         enddo
+c        call pyimage4(36,ntlat,ntlat,potplot,1,srcinfo(1,1:npts),
+c     1    srcinfo(2,1:npts),npts,xmin,xmax,ymin,ymax,5)
 
       endif
       close(133)
