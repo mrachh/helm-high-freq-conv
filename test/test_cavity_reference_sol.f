@@ -52,6 +52,8 @@
 
       close(33)
 
+      print *, ntarg
+
       allocate(targs(2,ntarg),ich_id_targ(ntarg),ts_targ(ntarg))
       allocate(pottarg(ntarg),pottargex(ntarg),potplot(ntarg))
       allocate(uinc(ntarg))
@@ -194,9 +196,10 @@ c
      1       ipars,pottargex(i))
         enddo
 
+
         call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
-     1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
-     2     soln,pottarg)
+     1    srccoefs,srcinfo,2,ntarg,targs,ich_id_targ,ts_targ,eps_plot,
+     2     zpars,soln,pottarg)
         
         erra = 0
         ra = 0
@@ -210,11 +213,10 @@ c
 
       do i=1,ntarg
         uinc(i) = -exp(ima*zk*(targs(1,i)*ct + targs(2,i)*st))
-
       enddo
       call lpcomp_helm_comb_dir_2d(nch,norders,ixys,iptype,npts,
-     1    srccoefs,srcinfo,2,ntarg,targs,ich_id,ts_pts,eps,zpars,
-     2     solnpw,potplot)
+     1    srccoefs,srcinfo,2,ntarg,targs,ich_id_targ,ts_targ,eps_plot,
+     2    zpars,solnpw,potplot)
       open(unit=35,file='potential.dat',status='replace')
       do i=1,ntarg
         write(35,*) real(potplot(i)),imag(potplot(i)),real(uinc(i)),
