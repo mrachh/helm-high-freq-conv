@@ -83,6 +83,7 @@ c
       fker => h2d_comb
       fkerstab => h2d_comb_stab
 
+
       call get_helm_guru_trid_quad_corr(zk,nch,k,ngk,npts,nb,
      1   adjs,srcinfo,srccoefs,fker,fkerstab,ndd,dpars,
      2   ndz,zpars,ndi,ipars,nnz,row_ptr,col_ind,nquad,
@@ -110,7 +111,6 @@ c
       integer ipars(ndi)
 
       real *8, allocatable :: srcinfog(:,:),qwtsg(:),tsg(:)
-      complex *16, allocatable :: row_ptrg(:), col_indg(:)
 
       real *8, allocatable :: tadj(:),wadj(:)
       real *8, allocatable :: srcover(:,:),wover(:)
@@ -122,10 +122,11 @@ c
       real *8, allocatable :: pslfmat(:,:,:)
       complex *16, allocatable :: zints(:,:), ztmp(:), zints2(:,:)
       complex *16, allocatable :: zpmat(:,:), zpslfmat(:,:,:)
+      complex *16, allocatable :: zpmat2(:,:), zpslfmat2(:,:,:)
       complex *16, allocatable :: fkern(:,:), fkernslf(:)
       real *8, allocatable :: xint(:,:,:),rdlpcoefs(:,:),rspcoefs(:,:)
       real *8, allocatable :: rdotns_all(:),rdotnt_all(:)
-      real *8, allocatable :: pmattmp(:,:)
+      real *8, allocatable :: pmattmp(:,:),pols(:)
 
       complex *16 ima,zalpha,zbeta
       external fker,fkerstab
@@ -197,15 +198,6 @@ c
         enddo
       enddo
 
-      call prin2('srcinfog=*',srcinfog,24)
-      call prin2('qwtsg=*',qwtsg,24)
-
-      ra = 0
-      do i=1,nptsg
-        ra = ra + qwtsg(i)
-      enddo
-      call prin2('ra=*',ra,1)
-
 c
 c
 c  initialize row_ptr, col_ind, and row_ptrg and col_indg
@@ -235,7 +227,6 @@ C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,il,ir,j,ipt)
           col_ind(row_ptr(ipt)+1) = ich
           col_ind(row_ptr(ipt)+2) = ir
         enddo
-
       enddo
 C$OMP END PARALLEL DO      
       print *, "done computing row_ptr and col_ind"
@@ -255,6 +246,7 @@ c
       allocate(xslfmat(k,2*nslf0,kg))
       allocate(pslfmat(k,2*nslf0,kg))
       allocate(zpslfmat(k,2*nslf0,kg))
+      allocate(zpslfmat2(ngk,2*nslf0,kg))
       print *, "k=",k
       print *, "kg=",kg
       print *, "nslf0=",nslf0
@@ -282,13 +274,14 @@ c  note vector assign
 c  
 
       zpslfmat = pslfmat
+      zpslfmat2(1:ngk,1:2*nslf0,1:kg) = zpslfmat(1:ngk,1:2*nslf0,1:kg)
       print *, "done computing self mat"
 
 c
 c  Compute off diagonal interpolation matrices 
 c
       m = 32
-      iref = min(6,ceiling(2*log(k+0.0d0)/log(2.0d0)))
+      iref = min(3,ceiling(2*log(k+0.0d0)/log(2.0d0)))
       print *, "iref=",iref
       nmid = 3
       nchquadadj = 2*(iref+1) + nmid
@@ -299,13 +292,14 @@ c
       call get_lege_adj_quad(m,nmid,iref,mquad,tadj,wadj)
       print *, "done getting adj quad"
       allocate(xintermat(k,mquad),pmat(k,mquad))
-      allocate(zpmat(k,mquad))
+      allocate(zpmat(k,mquad),zpmat2(ngk,mquad))
       print *, "m=",m
       print *, "mquad=",mquad
 
       do j=1,mquad
         call legepols(tadj(j),k-1,pmat(1,j))
         zpmat(1:k,j) = pmat(1:k,j)
+        zpmat2(1:ngk,j) = pmat(1:ngk,j)
       enddo
       call dgemm('t','n',k,mquad,k,alpha,umat,k,pmat,k,beta,xintermat,
      1   k)
@@ -327,12 +321,36 @@ c
       allocate(srcoverslf(8,2*nslf0),woverslf(2*nslf0))
       allocate(xint(k,k,kg),rdlpcoefs(k,kg),rspcoefs(k,kg))
       allocate(rdotns_all(2*nslf0),rdotnt_all(2*nslf0))
-      call legeinmt_allnodes(k,kg,xint)
+
+c
+c  can't use legeinmt to generate rdotn stuff, since
+c  tsg are not legendre nodes. Manually generate it here
+c
+
+cc      call legeinmt_allnodes(k,kg,xint)
+      xint = 0
+      allocate(pols(k))
+      do ipt=1,kg
+        tstart = tsg(ipt)
+        do inode = 1,k
+          tend = ts(inode)
+          hh = tend-tstart
+          do l=1,k
+            tuse = (tend + tstart)/2 + hh/2*ts(l)
+            call legepols(tuse,k-1,pols)
+            do ipol=1,k
+              xint(ipol,inode,ipt) = xint(ipol,inode,ipt) + 
+     1              pols(ipol)*wts(l)*hh/2
+            enddo
+          enddo
+        enddo
+      enddo
+
 
 
 C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,istart,istartg,il,ir)
 C$OMP$PRIVATE(rdlpcoefs,rspcoefs,inode,itarg,srcoverslf)
-C$OMP$PRIVATE(rdotns_all,rdotnt_all,ds,woverslf,fkernslf,m,mpt)
+C$OMP$PRIVATE(rdotns_all,rdotnt_all,ds,woverslf,fkernslf,mpt)
 C$OMP$PRIVATE(srcover,j,wover,itargl,itargr,l,fkern,icind,zints)
 C$OMP$PRIVATE(zints2,ztmp)
       do ich=1,nch
@@ -368,7 +386,7 @@ c     1         ndd,dpars,ndz,zpars,
 c     2         ndi,ipars,fkernslf(j)) 
             fkernslf(j) = fkernslf(j)*woverslf(j)
           enddo
-          call zgemv('n',ngk,2*nslf0,zalpha,zpslfmat(1,1,inode),k,
+          call zgemv('n',ngk,2*nslf0,zalpha,zpslfmat2(1,1,inode),ngk,
      1       fkernslf,1,zbeta,zints(1,inode),1)
         enddo
 c
@@ -396,7 +414,7 @@ c
           enddo
         enddo
 
-        call zgemm('n','n',ngk,2*kg,mquad,zalpha,zpmat,k,fkern,mquad,
+        call zgemm('n','n',ngk,2*kg,mquad,zalpha,zpmat2,ngk,fkern,mquad,
      1     zbeta,zints(1,kg+1),ngk)
         do j=1,ngk
           do l=1,3*kg
@@ -406,6 +424,7 @@ c
 
         do j=1,ngk
           mpt = (ich-1)*kg+1
+          ztmp = 0
           call get_galerkin_proj(2,ngk,kg,tsg,zints2(1,j),qwtsg(mpt),
      1       ztmp)
           do l=1,ngk
@@ -415,6 +434,7 @@ c
           enddo
 
           mpt = (il-1)*kg+1
+          ztmp = 0
           call get_galerkin_proj(2,ngk,kg,tsg,zints2(kg+1,j),qwtsg(mpt),
      1      ztmp)
           do l=1,ngk
@@ -424,6 +444,7 @@ c
           enddo
 
           mpt = (ir-1)*kg+1
+          ztmp = 0
           call get_galerkin_proj(2,ngk,kg,tsg,zints2(2*kg+1,j),
      1      qwtsg(mpt),ztmp)
           do l=1,ngk
@@ -705,8 +726,8 @@ c
 
 c
 
-C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,ipt,i,j,jpatch,srctmp2)
-C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,npover)
+ccC$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ich,ipt,i,j,jpatch,srctmp2)
+ccC$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val)
       do ich=1,nch
         do i=1,k
           ipt = (ich-1)*k + i
@@ -715,6 +736,7 @@ C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,npover)
             if (j.eq.1) jpatch = ich
             if (j.eq.2) jpatch = adjs(1,ich)
             if (j.eq.3) jpatch = adjs(2,ich)
+
             do l=ixyso(jpatch),ixyso(jpatch+1)-1
               nss = nss+1
               srctmp2(1,nss) = srcover(1,l)
@@ -747,6 +769,7 @@ C$OMP$PRIVATE(ctmp2,dtmp2,dipvec2,nss,l,jstart,ii,val,npover)
           pot(ipt) = pot(ipt) - val
         enddo
       enddo
+ccC$OMP END PARALLEL DO      
       
       call cpu_time(t2)
 C$      t2 = omp_get_wtime()     
@@ -763,13 +786,14 @@ c
         call get_galerkin_proj(2,ngk,k,ts,pot(istart),qwts(istart),
      1        potcoefs(jstart))
       enddo
+
 c
 c       add in precomputed quadrature
 
       call cpu_time(t1)
 C$      t1 = omp_get_wtime()
-C$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart)
-C$OMP$PRIVATE(jstart,l)
+ccC$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart)
+ccC$OMP$PRIVATE(jstart,l)
       do i=1,nb
         do j=row_ptr(i),row_ptr(i+1)-1
           jpatch = col_ind(j)
@@ -781,7 +805,7 @@ C$OMP$PRIVATE(jstart,l)
           enddo
         enddo
       enddo
-C$OMP END PARALLEL DO
+ccC$OMP END PARALLEL DO
 
 
       

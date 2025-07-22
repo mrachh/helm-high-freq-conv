@@ -7,12 +7,15 @@
 
       complex *16 zpars(3)
       integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
-      complex *16, allocatable :: wnear(:),wnearcoefs(:)
+      complex *16, allocatable :: wnear(:)
       complex *16, allocatable :: sigma(:),sigmacoefs(:),sigmatest(:)
       complex *16, allocatable :: soln(:),solncoefs(:)
 
       real *8, allocatable :: ts(:),umat(:,:),vmat(:,:),wts(:)
       real *8, allocatable :: srcrad(:)
+      real *8, allocatable :: tsg(:), wtsg(:)
+      real *8, allocatable :: srcinfog(:,:),qwtsg(:)
+      complex *16, allocatable :: sigmag(:),sigmacoefsg(:),sigmatestg(:)
       real *8, allocatable :: pmat(:,:)
       real *8 srctmp(8)
 
@@ -23,8 +26,10 @@
 
       complex *16, allocatable :: pottarg_plot(:)
       real *8, allocatable :: errs(:)
-      real *8, allocatable :: pols(:)
-      complex *16 zk,potex,pottarg,ztmp,pottarg2
+      real *8, allocatable :: pols(:),pmattmp(:,:)
+      complex *16 zk,potex,pottarg,ztmp,pottarg2,ima
+      complex *16 sigma2(100)
+      data ima/(0.0d0,1.0d0)/
 
       external funcurv_zfft
 
@@ -34,16 +39,16 @@
       pi = atan(done)*4
 
 
-      nch = 50
+      nch = 100
       k = 16
-      ngk = 4
+      ngk = 6
       npts = k*nch
 
       itype = 2
       allocate(ts(k),umat(k,k),vmat(k,k),wts(k))
       call legeexps(itype,k,ts,umat,vmat,wts)
 
-      zk = 1.0d0
+      zk = 1.1d0
       ndz = 3
       zpars(1) = zk
       zpars(2) = -ima*zk
@@ -90,6 +95,7 @@ c
 
       erra = 0
       ra = 0
+
       do ich=1,nch
         do j=1,k
           ipt = (ich-1)*k + j
@@ -122,9 +128,82 @@ c
         enddo
       enddo
 
-      call prin2('sigmacoefs=*',sigmacoefs,2*ngk)
+      call prin2('sigmacoefs=*',sigmacoefs,2*npts_gk)
       erra = sqrt(erra/ra)
       call prin2('error in projector=*',erra,1)
+c
+c  interpolate boundary to jeremy nodes
+c
+c
+      kg = 15
+      allocate(tsg(kg),wtsg(kg))
+      call load_selfquad_ipv0_iord2(tsg,wtsg,nslf)
+
+
+      print *, "nslf=",nslf
+
+
+      allocate(pmattmp(k,kg))
+      do i=1,kg
+        call legepols(tsg(i),k-1,pmattmp(1,i))
+      enddo
+
+      call prinf('kg=*',kg,1)
+      call prin2('tsg=*',tsg,kg)
+
+
+c
+c  set targets to be log*smooth + smooth nodes
+c
+c
+      nptsg = nch*kg
+      allocate(srcinfog(8,nptsg),qwtsg(nptsg))
+
+      do ich=1,nch
+        istart = (ich-1)*k + 1
+        jstart = (ich-1)*kg + 1
+        call dgemm('n','n',6,kg,k,alpha,srccoefs(1,istart),6,
+     1       pmattmp,k,beta,srcinfog(1,jstart),8)
+        do j=1,kg
+          jpt = (ich-1)*kg + j
+          ds = sqrt(srcinfog(3,jpt)**2 + srcinfog(4,jpt)**2)
+          srcinfog(7,jpt) = srcinfog(4,jpt)/ds
+          srcinfog(8,jpt) = -srcinfog(3,jpt)/ds
+          qwtsg(jpt) = ds*wtsg(j)
+        enddo
+      enddo
+
+      ra = 0
+      do i=1,nptsg
+        ra = ra + qwtsg(i)
+      enddo
+      call prin2('length of curve=*',ra,1)
+
+      allocate(sigmag(nptsg),sigmatestg(npts),sigmacoefsg(npts_gk))
+
+
+      do ich=1,nch
+        do j=1,kg
+          ipt = (ich-1)*kg + j
+          call h2d_slp(srcinfog(1,ipt),2,xyin,ndd,dpars,1,zk,ndi,
+     1       ipars,sigmag(ipt))
+        enddo
+        istart = (ich-1)*kg + 1
+        jstart = (ich-1)*ngk + 1
+        call get_galerkin_proj(2,ngk,kg,tsg,sigmag(istart),
+     1      qwtsg(istart),sigmacoefsg(jstart))
+      enddo
+
+      erra = 0
+      ra = 0
+      do i=1,npts_gk
+        erra = erra + abs(sigmacoefsg(i) - sigmacoefs(i))**2
+        ra = ra + abs(sigmacoefs(i))**2
+      enddo
+      erra = sqrt(erra/ra)
+      call prin2('error in jeremy nodes projector=*',erra,1)
+
+
 c
 c
 c  now test layer potential evaluator and compare with existing test
@@ -146,21 +225,21 @@ c
       enddo
       call prin2('length of curve=*',ra,1)
 
+      allocate(iquad(nnz+1))
+      do i=1,nnz+1
+        iquad(i) = (i-1)*ngk+1
+      enddo
+
+
       call get_helm_dir_trid_quad_corr(zk,nch,k,ngk,npts,nb,adjs,
      1 srcinfo,srccoefs,ndz,zpars,nnz,row_ptr,col_ind,nquad,wnear)
       
       call prinf('nnz=*',nnz,1)
       call prinf('nb=*',nb,1)
-      call prinf('row_ptr=*',row_ptr,nb+1)
-      call prinf('col_ind=*',col_ind,nnz)
+c      call prinf('row_ptr=*',row_ptr,nb+1)
+c      call prinf('col_ind=*',col_ind,nnz)
 
       call prin2('wnear=*',wnear,24)
-
-      allocate(iquad(nnz+1))
-
-      do i=1,nnz+1
-        iquad(i) = (i-1)*ngk+1
-      enddo
 
       eps = 0.51d-12
       niter = 0
