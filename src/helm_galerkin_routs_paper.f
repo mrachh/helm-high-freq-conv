@@ -155,9 +155,9 @@ c
 c  get log*smooth + smooth nodes + weights 
 c
 
-      nslf = 15
+      nslf = 24
       allocate(tslf0(nslf),wslf0(nslf))
-      call load_selfquad_ipv0_iord2(tslf0,wslf0,nslf0)
+      call load_selfquad_ipv0_iord3(tslf0,wslf0,nslf0)
 
       print *, "nslf=",nslf
       print *, "nslf0=",nslf0
